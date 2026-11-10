@@ -1,8 +1,7 @@
+import _heapq
 import functools
 import heapq
 import types
-
-import _heapq
 
 from crosshair.core import register_patch
 from crosshair.util import debug, imported_alternative, name_of_type
@@ -33,7 +32,6 @@ def make_registrations():
         "heapreplace",
     ]
     with imported_alternative("heapq", ("_heapq",)):
-
         # The pure python version doesn't always check argument types:
         heapq.heappush = heapq.heappush
         heapq.heappop = _check_first_arg_is_list(heapq.heappop)

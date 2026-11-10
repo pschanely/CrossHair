@@ -119,9 +119,9 @@ class TestTrickyCases:
         with Enforcement():
             pass
         for k, v in orig_class_dict.items():
-            assert (
-                DerivedFooable.__dict__[k] is v
-            ), f'member "{k}" changed afer encforcement'
+            assert DerivedFooable.__dict__[k] is v, (
+                f'member "{k}" changed afer encforcement'
+            )
 
     def test_enforcement_of_class_methods(self) -> None:
         with Enforcement():

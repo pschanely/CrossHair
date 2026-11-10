@@ -354,7 +354,6 @@ class BoolStashingValue:
 
 
 class ContainmentInterceptor(TracingModule):
-
     opcodes_wanted = frozenset([CONTAINS_OP])
 
     def trace_op(self, frame, codeobj, codenum):

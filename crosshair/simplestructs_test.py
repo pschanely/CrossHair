@@ -97,9 +97,9 @@ def test_slice_view() -> None:
         for stop in range(start, 7):
             view = SliceView(nums, start, stop)
             concrete = nums[start:stop]
-            assert (
-                list(view) == concrete
-            ), f"{ctr}: {start}:{stop}: {view} vs {concrete}"
+            assert list(view) == concrete, (
+                f"{ctr}: {start}:{stop}: {view} vs {concrete}"
+            )
             if stop - start > 0:
                 assert view[0] == nums[start]
             ctr += 1

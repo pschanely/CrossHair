@@ -187,7 +187,9 @@ class TracingModule:
             else:
                 # re-bind a function object if it was originally a bound method
                 # on the stack.
-                overwrite_target = target.__get__(binding_target, binding_target.__class__)  # type: ignore
+                overwrite_target = target.__get__(
+                    binding_target, binding_target.__class__
+                )  # type: ignore
             frame_stack_write(frame, fn_idx, overwrite_target)
         return None
 
@@ -224,9 +226,9 @@ class PatchingModule(TracingModule):
     def add(self, new_overrides: Dict[Callable, Callable]):
         for orig, new_override in new_overrides.items():
             prev_override = self.overrides.get(orig, orig)
-            assert (
-                prev_override is not new_override
-            ), f"Function patch {new_override} has already been applied"
+            assert prev_override is not new_override, (
+                f"Function patch {new_override} has already been applied"
+            )
             self.nextfn[(new_override.__code__, orig)] = prev_override
             self.overrides[orig] = new_override
 

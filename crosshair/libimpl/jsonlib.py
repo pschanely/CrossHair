@@ -82,7 +82,6 @@ encode_basestring_ascii = c_encode_basestring_ascii or py_encode_basestring_asci
 
 
 class JSONEncoder(object):
-
     item_separator = ", "
     key_separator = ": "
 
@@ -113,7 +112,7 @@ class JSONEncoder(object):
 
     def default(self, o):
         raise TypeError(
-            f"Object of type {o.__class__.__name__} " f"is not JSON serializable"
+            f"Object of type {o.__class__.__name__} is not JSON serializable"
         )
 
     def encode(self, o):

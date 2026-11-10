@@ -572,9 +572,7 @@ def numeric_binop_internal(op: BinFn, a: Number, b: Number):
             _BIN_OPS[(op, a_type, b_type)] = _MISSING
     if binfn is _MISSING:
         return NotImplemented
-    with (
-        ResumedTracing()
-    ):  # TODO: <-- can we instead selectively resume? Am I only doing this to satisfy the binop tracing check?
+    with ResumedTracing():  # TODO: <-- can we instead selectively resume? Am I only doing this to satisfy the binop tracing check?
         return binfn(op, a, b)
 
 
@@ -1503,9 +1501,9 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         with NoTracing():
             space = context_statespace()
             ret = space.find_model_value(self.var)
-            assert (
-                type(ret) is int
-            ), f"SymbolicInt with wrong SMT var type ({type(ret)})"
+            assert type(ret) is int, (
+                f"SymbolicInt with wrong SMT var type ({type(ret)})"
+            )
             return ret
 
     def __bool__(self):
@@ -1850,9 +1848,9 @@ _SMT_ONE_HALF = smt.real_val("1/2")
 
 class RealBasedSymbolicFloat(SymbolicFloat):
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type = float):
-        assert (
-            typ is float
-        ), f"RealBasedSymbolicFloat with unexpected python type ({type(typ)})"
+        assert typ is float, (
+            f"RealBasedSymbolicFloat with unexpected python type ({type(typ)})"
+        )
         context_statespace().cap_result_at_unknown()
         SymbolicValue.__init__(self, smtvar, typ)
 
@@ -4810,7 +4808,7 @@ def make_concrete_or_symbolic(typ: type):
             debug(
                 f"Prematurely realizing",
                 pytype,
-                f"value (~{1.-symbolic_probability:.1%} chance)",
+                f"value (~{1.0 - symbolic_probability:.1%} chance)",
             )
             ret = realize(ret)
         return ret
@@ -5579,7 +5577,10 @@ def make_registrations():
             p(Optional[int], "_step"),
         ),
     )
-    register_type(NoReturn, make_raiser(IgnoreAttempt, "Attempted to short circuit a NoReturn function"))  # type: ignore
+    register_type(
+        NoReturn,
+        make_raiser(IgnoreAttempt, "Attempted to short circuit a NoReturn function"),
+    )  # type: ignore
 
     # AsyncContextManager, lambda p: p(contextlib.AbstractAsyncContextManager),
     # AsyncGenerator: ,

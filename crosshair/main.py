@@ -463,7 +463,7 @@ def run_watch_loop(
                 else:
                     loc_desc = f'"{path_desc}"'
             if term_lines_rewritable:
-                line = f'  Analyzed {stats["num_paths"]} paths in {loc_desc}.       '
+                line = f"  Analyzed {stats['num_paths']} paths in {loc_desc}.       "
             else:
                 line = f"  Analyzing paths in {loc_desc}: "
             print(color(line, AnsiColor.OKBLUE), end="")

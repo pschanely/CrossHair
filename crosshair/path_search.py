@@ -47,8 +47,8 @@ def path_search(
 ) -> None:
 
     if argument_formatter is None:
-        checked_format = (
-            lambda args: context_statespace()
+        checked_format = lambda args: (
+            context_statespace()
             .extra(LazyCreationRepr)
             .eval_friendly_format(args, format_boundargs_as_dictionary)
         )

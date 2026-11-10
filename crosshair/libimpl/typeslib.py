@@ -11,5 +11,7 @@ def _repr(map: MappingProxyType):
 
 
 def make_registrations():
-    register_type(MappingProxyType, lambda p, kt=Any, vt=Any: MappingProxyType(p(Dict[kt, vt])))  # type: ignore
+    register_type(
+        MappingProxyType, lambda p, kt=Any, vt=Any: MappingProxyType(p(Dict[kt, vt]))
+    )  # type: ignore
     register_patch(MappingProxyType.__repr__, _repr)

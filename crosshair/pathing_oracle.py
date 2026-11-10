@@ -138,7 +138,7 @@ class CoveragePathingOracle(AbstractPathingOracle):
                         leading_conditions.append(-expr_signature)
                     else:
                         raise CrossHairInternal(
-                            f"{type(path[step])} was followed by {type(path[step+1])}"
+                            f"{type(path[step])} was followed by {type(path[step + 1])}"
                         )
         visits = self.visits
         prev_len = len(visits)

@@ -39,9 +39,8 @@ from typing import (
     Tuple,
 )
 
-from hypothesis import HealthCheck, given
+from hypothesis import HealthCheck, given, settings
 from hypothesis import seed as hyp_seed
-from hypothesis import settings
 from hypothesis import strategies as st
 
 from crosshair.auditwall import SideEffectDetected, enabled_auditwall
@@ -484,8 +483,10 @@ def _jsonable(n: int) -> "st.SearchStrategy[Any]":
     leaf = st.none() | st.booleans() | st.integers() | st.text(max_size=n)
     return st.recursive(
         leaf,
-        lambda c: st.lists(c, max_size=n)
-        | st.dictionaries(st.text(max_size=3), c, max_size=n),
+        lambda c: (
+            st.lists(c, max_size=n)
+            | st.dictionaries(st.text(max_size=3), c, max_size=n)
+        ),
         max_leaves=n + 1,
     )
 

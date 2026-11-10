@@ -727,7 +727,7 @@ def test_does_not_report_with_actual_repr():
     actual, expected = check_messages(
         analyze_function(f),
         state=MessageType.POST_FAIL,
-        message="false when calling f(BiggerCat()) " "(which returns 2)",
+        message="false when calling f(BiggerCat()) (which returns 2)",
     )
     assert expected == actual
 

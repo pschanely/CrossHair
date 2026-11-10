@@ -144,9 +144,9 @@ def _check(label, op):
             call, inputs, max_pin_iters=PIN_ITERS, pin_timeout=PIN_TIMEOUT
         )
         checked += result.checked
-        assert (
-            result.divergence is None
-        ), f"{label} diverges on `{call.expr}` {result.divergence.describe()}"
+        assert result.divergence is None, (
+            f"{label} diverges on `{call.expr}` {result.divergence.describe()}"
+        )
     if checked == 0:
         pytest.skip(f"no drivable inputs for {label}")
 

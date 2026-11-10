@@ -1281,7 +1281,7 @@ class ShellMutableSet(SetBase, AbcMutableSet):
             if not isinstance(x, AbcSet):
                 return NotImplemented
             return ShellMutableSet(
-                LazySetCombination(lambda x, y: (x and not y), self._inner, x)
+                LazySetCombination(lambda x, y: x and not y, self._inner, x)
             )
 
     def __rsub__(self, x):
@@ -1289,7 +1289,7 @@ class ShellMutableSet(SetBase, AbcMutableSet):
             if not isinstance(x, AbcSet):
                 return NotImplemented
             return ShellMutableSet(
-                LazySetCombination(lambda x, y: (y and not x), self._inner, x)
+                LazySetCombination(lambda x, y: y and not x, self._inner, x)
             )
 
     def __ior__(self, x):
@@ -1324,6 +1324,6 @@ class ShellMutableSet(SetBase, AbcMutableSet):
             if not isinstance(x, AbcSet):
                 return NotImplemented
             self._inner = LazySetCombination(
-                lambda x, y: (x and not y), self._inner, _force_arg_to_set(x)
+                lambda x, y: x and not y, self._inner, _force_arg_to_set(x)
             )
             return self

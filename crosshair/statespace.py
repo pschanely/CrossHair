@@ -1318,7 +1318,6 @@ class StateSpace:
         with NoTracing():
             # TODO: needs more testing
             for curref, curtyp, curval in self.heaps[snapshot]:
-
                 # TODO: using unify() is almost certainly wrong; just because the types
                 # have some instances in common does not mean that `curval` actually
                 # satisfies the requirements of `typ`:

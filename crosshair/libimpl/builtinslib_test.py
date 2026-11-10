@@ -439,9 +439,9 @@ def test_int_eq_ieee_negative_zero():
     # promotes the int to a float and dispatches through numeric_binop/apply_smt.
     with standalone_statespace as space:
         with NoTracing():
-            space.extra(ModelingDirector).global_representations[
-                float
-            ] = PreciseIeeeSymbolicFloat
+            space.extra(ModelingDirector).global_representations[float] = (
+                PreciseIeeeSymbolicFloat
+            )
             zero_int = SymbolicInt("zero_int")
             neg_zero = PreciseIeeeSymbolicFloat(
                 smt.fp_val(-0.0, PreciseIeeeSymbolicFloat._ch_smt_sort())
@@ -465,9 +465,9 @@ def test_int_eq_ieee_negative_zero():
     ],
 )
 def test_ieee_int_to_float_overflow_boundary(space, value, overflows):
-    space.extra(ModelingDirector).global_representations[
-        float
-    ] = PreciseIeeeSymbolicFloat
+    space.extra(ModelingDirector).global_representations[float] = (
+        PreciseIeeeSymbolicFloat
+    )
     x = SymbolicInt("x")
     space.add(x.var == value)
     with ResumedTracing():
@@ -491,9 +491,9 @@ def test_ieee_int_to_float_overflow_boundary(space, value, overflows):
     "op", [operator.eq, operator.ne, operator.lt, operator.le, operator.gt, operator.ge]
 )
 def test_ieee_int_float_comparisons_are_exact(space, int_value, float_value, op):
-    space.extra(ModelingDirector).global_representations[
-        float
-    ] = PreciseIeeeSymbolicFloat
+    space.extra(ModelingDirector).global_representations[float] = (
+        PreciseIeeeSymbolicFloat
+    )
     symbolic_int = SymbolicInt("symbolic_int")
     symbolic_float = PreciseIeeeSymbolicFloat(
         z3.FPVal(float_value, PreciseIeeeSymbolicFloat._ch_smt_sort())
@@ -508,9 +508,9 @@ def test_ieee_int_float_comparisons_are_exact(space, int_value, float_value, op)
 
 
 def test_ieee_huge_int_pow_raises_overflow(space):
-    space.extra(ModelingDirector).global_representations[
-        float
-    ] = PreciseIeeeSymbolicFloat
+    space.extra(ModelingDirector).global_representations[float] = (
+        PreciseIeeeSymbolicFloat
+    )
     exponent = SymbolicInt("exponent")
     space.add(exponent.var == 1 << 1100)
     with (
@@ -534,9 +534,9 @@ def test_ieee_huge_int_pow_raises_overflow(space):
     ],
 )
 def test_ieee_int_truediv_converts_result(space, numerator, denominator):
-    space.extra(ModelingDirector).global_representations[
-        float
-    ] = PreciseIeeeSymbolicFloat
+    space.extra(ModelingDirector).global_representations[float] = (
+        PreciseIeeeSymbolicFloat
+    )
     symbolic_numerator = _pin_symbolic_to(space, "numerator", numerator)
     symbolic_denominator = _pin_symbolic_to(space, "denominator", denominator)
     with ResumedTracing():
@@ -1198,9 +1198,9 @@ _DIVISION_OPERANDS = [
 @pytest.mark.parametrize("a", _DIVISION_OPERANDS, ids=repr)
 @pytest.mark.parametrize("b", _DIVISION_OPERANDS, ids=repr)
 def test_ieee_float_division_ops_match_cpython(space, op, symbolic_side, a, b):
-    space.extra(ModelingDirector).global_representations[
-        float
-    ] = PreciseIeeeSymbolicFloat
+    space.extra(ModelingDirector).global_representations[float] = (
+        PreciseIeeeSymbolicFloat
+    )
     args = []
     for side, val in (("left", a), ("right", b)):
         if symbolic_side in (side, "both"):
@@ -4711,9 +4711,9 @@ def test_deep_realization(space, typ):
 
 
 def test_float_round_to_zero(space):
-    space.extra(ModelingDirector).global_representations[
-        float
-    ] = PreciseIeeeSymbolicFloat
+    space.extra(ModelingDirector).global_representations[float] = (
+        PreciseIeeeSymbolicFloat
+    )
     n = proxy_for_type(float, "n")
     d = proxy_for_type(float, "d")
     with ResumedTracing():
@@ -4724,9 +4724,9 @@ def test_float_round_to_zero(space):
 
 
 def test_float_neg_zero_is_falsey(space):
-    space.extra(ModelingDirector).global_representations[
-        float
-    ] = PreciseIeeeSymbolicFloat
+    space.extra(ModelingDirector).global_representations[float] = (
+        PreciseIeeeSymbolicFloat
+    )
     x = proxy_for_type(float, "x")
     with ResumedTracing():
         space.add(x == -10.0)
@@ -4742,9 +4742,9 @@ def test_float_neg_zero_is_falsey(space):
 )
 @pytest.mark.parametrize("val", [math.inf, -math.inf, math.nan])
 def test_float_is_integer_nonfinite(space, val):
-    space.extra(ModelingDirector).global_representations[
-        float
-    ] = PreciseIeeeSymbolicFloat
+    space.extra(ModelingDirector).global_representations[float] = (
+        PreciseIeeeSymbolicFloat
+    )
     x = PreciseIeeeSymbolicFloat("x")
     space.add(x.var == smt.fp_val(val, x.var.sort()))
     with ResumedTracing():

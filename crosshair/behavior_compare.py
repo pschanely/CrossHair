@@ -188,7 +188,7 @@ class ExecutionResult:
         if include_postexec:
             a = [repr(a) for a in self.post_args]
             a += [f"{k}={v!r}" for k, v in self.post_kwargs.items()]
-            ret += f'  post=({", ".join(a)})'
+            ret += f"  post=({', '.join(a)})"
         return ret
 
 
@@ -385,12 +385,12 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
                 symbolic_type = type(symbolic_arg)
                 concrete_type = type(concrete_arg)
             true_concrete_type = type(concrete_arg)
-            assert (
-                true_concrete_type == concrete_type
-            ), f"{label} did not realize. It is {true_concrete_type} instead of {concrete_type}."
-            assert (
-                true_concrete_type == symbolic_type
-            ), f"{label} should realize to {symbolic_type}; it is {true_concrete_type} instead."
+            assert true_concrete_type == concrete_type, (
+                f"{label} did not realize. It is {true_concrete_type} instead of {concrete_type}."
+            )
+            assert true_concrete_type == symbolic_type, (
+                f"{label} should realize to {symbolic_type}; it is {true_concrete_type} instead."
+            )
 
     with NoTracing():
         concrete_result = summarize_execution(
