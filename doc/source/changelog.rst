@@ -32,6 +32,8 @@ Next Version
    recently inserted item.
  * Fixed symbolic ``collections.deque.maxlen`` being a method instead of an
    attribute.
+ * Replace black, isort, and flake8 with ruff for linting and formatting.
+   (no user-facing changes)
 
 
 Version 0.0.113

@@ -27,9 +27,9 @@ The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, 
 
 ## Key Conventions
 
-- **Formatting**: Black (88 chars), isort, flake8
+- **Formatting**: ruff (lint, import sorting, and formatting; 88 chars)
 - **Tests**: pytest; run with `PYTHONHASHSEED=0` for reproducibility
-- **Pre-commit** runs black, isort, flake8, mypy, and pytest
+- **Pre-commit** runs ruff, mypy, and pytest
 - **Type annotations**: Required for all non-test code. Generally avoid type annotations in tests.
 - **Naming**: Name functions and parameters by what they **do**, not by how they're used. Rename as function behaviors evolve.
 - **Doc strings**:  Drop anything that requires (or refers to) external context. Describe current behaviors only - no rationales. Must make sense when read by fresh eyes.

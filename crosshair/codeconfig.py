@@ -113,6 +113,6 @@ def collect_options(thing: Any) -> AnalysisOptionSet:
         # (we don't want to catch directives for functions inside it)
         # TODO: detect directives at other levels like classes etc and warn that they
         # will be ignored.
-        directives = [(l, c, t) for (l, c, t) in directives if c == 0]
+        directives = [(ln, c, t) for (ln, c, t) in directives if c == 0]
     my_opts = parse_directives(directives)
     return parent_opts.overlay(my_opts)

@@ -42,23 +42,20 @@ dependencies = [
 
 [project.optional-dependencies]
 # NOTE: the runtime package still supports Python 3.9, but the dev tooling
-# below (black, isort, mypy, pytest) requires >=3.10, so contributing to
+# below (mypy, pytest) requires >=3.10, so contributing to
 # CrossHair requires Python 3.10 or newer.
 dev = [
     "autodocsumm>=0.2.2,<1",
-    "black==26.10.1",
     "deal>=4.13.0",
-    "flake8==7.1.2",
-    "Flake8-pyproject>=1.2",  # lets flake8 read [tool.flake8] below
     "hypothesis>=6.0.0",  # input generation for crosshair.inputgen / fuzz_core_test
     "icontract>=2.4.0",
-    "isort==8.0.1",
     "mypy==2.4.0",
     "numpy==1.24.0; python_version < '3.12'",
     "numpy==2.5.3; python_version >= '3.12'",
     "pre-commit~=4.3",
     "pytest==9.1.1",
     "pytest-xdist==3.8.0",
+    "ruff==0.17.4",
     "setuptools",
     "sphinx>=3.4.3",
     "sphinx-rtd-theme>=0.5.1",
@@ -82,16 +79,14 @@ crosshair = ["*.h", "py.typed", "unicode_data/*.json"]
 name = "_crosshair_tracers"
 sources = ["crosshair/_tracers.c"]
 
-[tool.flake8]
-select = ["E7", "E9", "F60", "F63", "F7", "F82"]
-# D202 - conflicts with black
-# E704 - conflicts with black
+[tool.ruff.lint]
+select = ["E7", "E9", "F60", "F63", "F7", "F82", "I"]
 # E721 - allow type comparisons with equality
 # E731 - allow assignment to lambdas
-extend-ignore = ["D202", "E704", "E721", "E731"]
+ignore = ["E721", "E731"]
 
-[tool.isort]
-profile = "black"
+[tool.ruff.lint.isort]
+known-first-party = ["crosshair", "_crosshair_tracers"]
 
 [tool.mypy]
 python_version = "3.13"

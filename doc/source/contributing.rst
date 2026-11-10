@@ -62,10 +62,10 @@ Pre-commit Checks
 We provide a battery of pre-commit checks to make the code uniform and
 consistent across the code base.
 
-We use `black`_ to format the code and use the default maximum line length of
-88 characters.
+We use `ruff`_ to lint, sort imports, and format the code (with the default
+maximum line length of 88 characters).
 
-.. _black: https://pypi.org/project/black/
+.. _ruff: https://docs.astral.sh/ruff/
 
 To run all pre-commit checks, run from the root directory:
 
