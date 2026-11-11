@@ -4846,7 +4846,6 @@ def test_object_deepcopy_in_container(space):
         assert objs[0].count == 0
 
 
-
 def test_object_deepcopy_of_heap_element(space):
     objs = proxy_for_type(List[object], "objs")
     with ResumedTracing():
@@ -4857,6 +4856,7 @@ def test_object_deepcopy_of_heap_element(space):
         space.add(obj_copy.count == 0)
         obj_copy.count += 1
         assert obj.count == 0
+
 
 def test_object_old_is_independent():
     def f(x: object) -> None:
