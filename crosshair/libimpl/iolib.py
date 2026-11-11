@@ -11,11 +11,6 @@ _UNIVERSAL_NEWLINE_RE = re.compile(r"(\r\n|\r|\n)")
 
 
 class BackedStringIO(TextIOBase, CrossHairValue):
-    _contents: str
-    _pos: int
-    _discovered_newlines: set
-    _newline_mode: Optional[str]
-
     @assert_tracing(True)
     def __init__(
         self,
@@ -33,10 +28,12 @@ class BackedStringIO(TextIOBase, CrossHairValue):
             raise TypeError
         if pos < 0:
             raise ValueError
-        self._newline_mode = newline
-        self._discovered_newlines = set()
-        self._pos = pos
-        self._contents = self._replace_newlines(initial_value) if initial_value else ""
+        self._newline_mode: Optional[str] = newline
+        self._discovered_newlines: set = set()
+        self._pos: int = pos
+        self._contents: str = (
+            self._replace_newlines(initial_value) if initial_value else ""
+        )
 
     def __repr__(self):
         contents, newline_mode, pos = self._contents, self._newline_mode, self._pos

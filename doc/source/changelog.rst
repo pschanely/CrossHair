@@ -37,6 +37,11 @@ Next Version
    recently inserted item.
  * Fixed symbolic ``collections.deque.maxlen`` being a method instead of an
    attribute.
+ * Fixed symbolic values exposing CrossHair's internal ``__annotations__``.
+   Symbolic lists, tuples, sets, and ``io.StringIO`` objects no longer have an
+   ``__annotations__`` attribute, symbolic types report the annotations of the
+   type they stand for, and symbolic callables report empty annotations.
+   (`see #578 <https://github.com/pschanely/CrossHair/issues/578>`__)
  * Replace black, isort, and flake8 with ruff for linting and formatting.
    (no user-facing changes)
 

@@ -4023,6 +4023,23 @@ def test_type_instance_creation(space: StateSpace) -> None:
         assert inst.size() > 0
 
 
+class Annotated2d:
+    x: int
+    y: int
+
+
+def test_type_annotations_delegate_to_realized_type(space) -> None:
+    t = proxy_for_type(Type[Annotated2d], "t")
+    with ResumedTracing():
+        assert t.__annotations__ == {"x": int, "y": int}
+
+
+def test_callable_annotations_are_empty(space) -> None:
+    f = proxy_for_type(Callable[[int], int], "f")
+    with ResumedTracing():
+        assert f.__annotations__ == {}
+
+
 def test_type_comparison() -> None:
     def f(t: Type) -> bool:
         """post: _"""
