@@ -31,6 +31,9 @@ Next Version
    objects (producing false counterexamples or hiding real ones), and caused
    ``diffbehavior`` to report differences between identical functions.
    (`see #573 <https://github.com/pschanely/CrossHair/issues/573>`__)
+ * Fixed ``random()`` on a ``random.Random`` argument always returning ``0.0``,
+   which caused CrossHair to confirm false postconditions.
+   (`see #576 <https://github.com/pschanely/CrossHair/issues/576>`__)
  * Fixed several incorrect behaviors of symbolic ``collections.defaultdict``:
    ``in``, ``get()``, ``pop()``, and ``setdefault()`` no longer invoke the
    default factory for missing keys, and ``popitem()`` now removes the most
