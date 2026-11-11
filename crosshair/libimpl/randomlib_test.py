@@ -7,7 +7,7 @@ from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.randomlib import ExplicitRandom
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
-from crosshair.tracers import ResumedTracing
+from crosshair.tracers import NoTracing, ResumedTracing
 
 
 def test_ExplicitRandom():
@@ -26,6 +26,35 @@ def test_ExplicitRandom_copy():
     assert rng2.randint(0, 5) == 1
     assert rng.randint(0, 5) == 2
     assert rng2.randint(0, 5) == 2
+
+
+def test_ExplicitRandom_deepcopy_shares_values_generated_later():
+    rng = ExplicitRandom([], 0, lambda c: 3, lambda: 0.5)
+    rng2 = copy.deepcopy(rng)
+    assert rng2.random() == 0.5
+    assert rng2.randint(0, 5) == 3
+    assert rng.random() == 0.5
+    assert rng.randint(0, 5) == 3
+
+
+def test_proxy_random_deepcopy_stays_symbolic():
+    with standalone_statespace as space:
+        rng = proxy_for_type(random.Random, "rng")
+        with NoTracing():
+            rng2 = copy.deepcopy(rng)
+        val = rng2.random()
+        with ResumedTracing():
+            assert space.is_possible(val == 0.0)
+            assert space.is_possible(val == 0.5)
+            assert not space.is_possible(rng.random() != val)
+
+
+def test_symbolic_random_arg():
+    def f(r: random.Random) -> float:
+        """post: _ == 0.0"""
+        return r.random()
+
+    check_states(f, POST_FAIL)
 
 
 def test_proxy_random():

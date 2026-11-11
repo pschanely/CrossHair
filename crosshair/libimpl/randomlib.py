@@ -26,17 +26,14 @@ class ExplicitRandom(random.Random):
         super().__init__()
 
     def __copy__(self):
-        # Just a regular copy. (otherwise, we'd be deferring to getstate/setstate)
         cls = self.__class__
         result = cls.__new__(cls)
         result.__dict__.update(self.__dict__)
         return result
 
-    def __ch_deepcopy__(self, memo):
-        # We pretend this is a deepcopy, but it isn't.
-        # That way, the values lazily added to _future_values will be the same in each
-        # instance, even though we don't know what they are at the time of the deep
-        # copy.
+    def __deepcopy__(self, memo):
+        # Copies share the (append-only) list of future values, so that each copy
+        # produces the same sequence, even for values generated after copying.
         return self.__copy__()
 
     def __repr__(self) -> str:
