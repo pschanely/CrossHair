@@ -77,6 +77,29 @@ def _append_seven(container):
     return container
 
 
+def _inner_values(container):
+    return container.values() if isinstance(container, dict) else container
+
+
+def _append_seven_inside(container):
+    for inner in _inner_values(container):
+        inner.append(7)
+    return container
+
+
+def _pop_inside(container):
+    for inner in _inner_values(container):
+        if inner:
+            inner.pop()
+    return container
+
+
+def _toggle_seven_inside(container):
+    for inner in _inner_values(container):
+        inner ^= {7}
+    return container
+
+
 def _repeat_through_alias(container):
     alias = container
     alias *= 2
@@ -121,6 +144,13 @@ CASES = [
     ("frozenset | frozenset", FrozenSet[int], lambda s: s | frozenset({7})),
     ("dict", Dict[int, int], lambda d: d),
     ("dict copy", Dict[int, int], lambda d: d.copy()),
+    ("nested list", List[List[int]], lambda ls: ls),
+    ("nested list inner append", List[List[int]], _append_seven_inside),
+    ("nested list inner pop", List[List[int]], _pop_inside),
+    ("tuple of lists inner append", Tuple[List[int], ...], _append_seven_inside),
+    ("list of sets inner toggle", List[Set[int]], _toggle_seven_inside),
+    ("dict of lists inner append", Dict[int, List[int]], _append_seven_inside),
+    ("dict of sets inner toggle", Dict[int, Set[int]], _toggle_seven_inside),
 ]
 
 

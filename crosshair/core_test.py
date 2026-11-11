@@ -422,6 +422,45 @@ def test_obj_member_change_detect() -> None:
     check_states(f, POST_ERR)
 
 
+def test_old_has_nested_state_on_entry() -> None:
+    def f(xs: List[List[int]]) -> None:
+        """
+        pre: len(xs) == 1
+        pre: len(xs[0]) == 1
+        post[xs]: len(__old__.xs[0]) == 1 and len(xs[0]) == 0
+        """
+        xs[0].pop()
+
+    check_states(f, CONFIRMED)
+
+
+def test_old_has_nested_set_state_on_entry() -> None:
+    def f(d: Dict[int, Set[int]]) -> int:
+        """
+        pre: len(d) == 1
+        post[d]: _ == sum(0 in s for s in __old__.d.values())
+        """
+        n = 0
+        for s in d.values():
+            n += 0 in s
+            s.discard(0)
+        return n
+
+    check_states(f, CONFIRMED)
+
+
+def test_nested_member_change_detect() -> None:
+    def f(xs: List[List[int]]) -> None:
+        """
+        pre: len(xs) == 1
+        pre: len(xs[0]) == 1
+        post[]: True
+        """
+        xs[0].pop()
+
+    check_states(f, POST_ERR)
+
+
 def test_example_second_largest() -> None:
     def second_largest(items: List[int]) -> int:
         """
@@ -1203,19 +1242,17 @@ def test_error_message_has_unmodified_args() -> None:
     assert actual == expected
 
 
-# TODO: List[List] involves no HeapRefs
-def TODO_test_potential_circular_references() -> None:
-    # TODO?: potential aliasing of input argument data?
-    def f(foo: List[List], thing: object) -> None:
+def test_mutation_through_aliased_argument_elements() -> None:
+    def f(foo: List[List]) -> None:
         """
         pre: len(foo) == 2
         pre: len(foo[0]) == 1
         pre: len(foo[1]) == 1
         post: len(foo[1]) == 1
         """
-        foo[0].append(object())  # TODO: using 42 yields a z3 sort error
+        foo[0].append(42)
 
-    check_states(f, CONFIRMED)
+    check_states(f, POST_FAIL)
 
 
 def test_nonatomic_comparison() -> None:

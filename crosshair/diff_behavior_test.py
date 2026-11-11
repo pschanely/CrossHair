@@ -174,6 +174,19 @@ def test_diff_behavior_lambda() -> None:
     assert diffs == []
 
 
+def _count_and_clear_inner(xs: List[List[int]]) -> int:
+    count = sum(len(x) for x in xs)
+    for x in xs:
+        x.clear()
+    return count
+
+
+def test_diff_behavior_same_function_mutating_nested_args() -> None:
+    fn = FunctionInfo.from_fn(_count_and_clear_inner)
+    diffs = diff_behavior(fn, fn, DEFAULT_OPTIONS.overlay(max_iterations=20))
+    assert diffs == []
+
+
 def test_diffbehavior_exceptions_default() -> None:
     """
     Default behavior of `diffbehavior` - treating exceptions as different.
