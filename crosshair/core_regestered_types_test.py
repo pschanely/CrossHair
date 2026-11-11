@@ -1,3 +1,4 @@
+import inspect
 import re
 from dataclasses import dataclass
 from typing import (
@@ -8,6 +9,7 @@ from typing import (
     List,
     NamedTuple,
     NoReturn,
+    Set,
     SupportsBytes,
     SupportsComplex,
     Union,
@@ -19,7 +21,13 @@ import typing_inspect  # type: ignore
 from crosshair.core import _SIMPLE_PROXIES, proxy_for_type
 from crosshair.dynamic_typing import origin_of
 from crosshair.tracers import ResumedTracing
-from crosshair.util import CrosshairUnsupported, IgnoreAttempt, debug, name_of_type
+from crosshair.util import (
+    CrosshairUnsupported,
+    CrossHairValue,
+    IgnoreAttempt,
+    debug,
+    name_of_type,
+)
 
 """
 Tests that the builtin and standard library types behave like their
@@ -82,3 +90,36 @@ def test_patch(typ: type, creator: Callable, space):
     origin = origin_of(typ)
     with ResumedTracing():
         assert isinstance(proxy, origin)
+
+
+def _all_subclasses(cls: type) -> Set[type]:
+    found: Set[type] = set()
+    pending = [cls]
+    while pending:
+        subclasses: List[type] = pending.pop().__subclasses__()
+        for sub in subclasses:
+            if sub not in found:
+                found.add(sub)
+                pending.append(sub)
+    return found
+
+
+def _class_annotations(cls: type) -> dict:
+    if not hasattr(inspect, "get_annotations"):
+        return cls.__dict__.get("__annotations__", {})
+    try:
+        return inspect.get_annotations(cls)
+    except ValueError:  # e.g. a property that proxies to a wrapped object
+        return {}
+
+
+def test_crosshair_values_have_no_class_annotations():
+    offenders = {
+        f"{base.__module__}.{base.__qualname__}"
+        for cls in _all_subclasses(CrossHairValue)
+        if cls.__module__.startswith("crosshair.")
+        and not cls.__module__.endswith("_test")
+        for base in cls.__mro__
+        if _class_annotations(base)
+    }
+    assert offenders == set(), offenders

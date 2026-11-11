@@ -1,6 +1,5 @@
 import collections.abc
 import copy
-import dataclasses
 import itertools
 import numbers
 import operator
@@ -553,11 +552,14 @@ class SeqBase(CrossHairValue):
         return self.__mul__(other)
 
 
-@dataclasses.dataclass(eq=False)
 class SequenceConcatenation(collections.abc.Sequence, SeqBase):
-    _first: Sequence
-    _second: Sequence
-    _len: Optional[int] = None
+    def __init__(self, first: Sequence, second: Sequence):
+        self._first = first
+        self._second = second
+        self._len: Optional[int] = None
+
+    def __repr__(self):
+        return f"SequenceConcatenation({self._first!r}, {self._second!r})"
 
     def __ch_pytype__(self):
         return tuple
@@ -630,11 +632,14 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
         return self._len
 
 
-@dataclasses.dataclass(eq=False)  # type: ignore # (https://github.com/python/mypy/issues/5374)
 class SliceView(collections.abc.Sequence, SeqBase):
-    seq: Sequence
-    start: int
-    stop: int
+    def __init__(self, seq: Sequence, start: int, stop: int):
+        self.seq = seq
+        self.start = start
+        self.stop = stop
+
+    def __repr__(self):
+        return f"SliceView({self.seq!r}, {self.start!r}, {self.stop!r})"
 
     def __ch_pytype__(self):
         return tuple
@@ -705,7 +710,6 @@ def sequence_evaluation(seq: Iterable):
         return list(tracing_iter(seq))
 
 
-@dataclasses.dataclass(eq=False)
 class ShellSequence(collections.abc.Sequence, SeqBase):
     """
     Present the contents of another sequence as a sequence of a builtin type.
@@ -715,7 +719,8 @@ class ShellSequence(collections.abc.Sequence, SeqBase):
     Operations that produce a new sequence wrap it in a shell of the same kind.
     """
 
-    inner: Sequence
+    def __init__(self, inner: Sequence):
+        self.inner = inner
 
     def __ch_pytype__(self):
         return tuple
@@ -1146,10 +1151,9 @@ class ShellMutableSet(SetBase, AbcMutableSet):
     assuming the underlying set(s) do so as well.
     """
 
-    _inner: Union[frozenset, FrozenSetBase]
-
     @assert_tracing(False)
     def __init__(self, inner: Iterable = EmptySet()):
+        self._inner: Union[frozenset, FrozenSetBase]
         if isinstance(inner, FrozenSetBase):
             self._inner = inner
         elif isinstance(inner, frozenset):
