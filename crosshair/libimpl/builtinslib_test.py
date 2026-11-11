@@ -4814,13 +4814,13 @@ def test_object_deepcopy_independence(space, realize_copy_first):
         assert second.count == 0
 
 
-
 def test_object_deepcopy_shares_atomic_values(space):
     obj = proxy_for_type(object, "obj")
     with ResumedTracing():
         obj_copy = copy.deepcopy(obj)
         assert isinstance(obj_copy, int)
     assert obj._wrapped() is obj_copy._wrapped()
+
 
 def test_object_deepcopy_of_deepcopy(space):
     obj = proxy_for_type(object, "obj")
@@ -4845,6 +4845,18 @@ def test_object_deepcopy_in_container(space):
         obj_copy.count += 1
         assert objs[0].count == 0
 
+
+
+def test_object_deepcopy_of_heap_element(space):
+    objs = proxy_for_type(List[object], "objs")
+    with ResumedTracing():
+        space.add(len(objs) == 1)
+        obj = objs[0]
+        obj_copy = copy.deepcopy(obj)
+        assert isinstance(obj_copy, _Tally)
+        space.add(obj_copy.count == 0)
+        obj_copy.count += 1
+        assert obj.count == 0
 
 def test_object_old_is_independent():
     def f(x: object) -> None:

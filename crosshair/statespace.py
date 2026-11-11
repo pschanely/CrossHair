@@ -33,7 +33,7 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing, smt
 from crosshair.condition_parser import ConditionExpr
-from crosshair.copyext import CopyMode, deepcopyext
+from crosshair.copyext import CopyMode, deepcopyext, record_copy
 from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
@@ -171,7 +171,7 @@ class SymbolicHeap:
     def __deepcopy__(self, memo: Dict) -> "SymbolicHeap":
         with NoTracing():
             result = SymbolicHeap()
-            memo[id(self)] = result
+            record_copy(memo, self, result)
             result.objects = deepcopyext(self.objects, CopyMode.BEST_EFFORT, memo)
         return result
 

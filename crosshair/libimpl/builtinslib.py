@@ -53,6 +53,7 @@ import typing_inspect  # type: ignore
 
 from crosshair import smt
 from crosshair.abcstring import AbcString
+from crosshair.copyext import record_copy
 from crosshair.core import (
     SymbolicFactory,
     deep_realize,
@@ -293,7 +294,7 @@ class SymbolicValue(CrossHairValue):
 
     def __deepcopy__(self, memo):
         result = copy.copy(self)
-        memo[id(self)] = result
+        record_copy(memo, self, result)
         if self.heap is not None:
             result.heap = copy.deepcopy(self.heap, memo)
         return result
@@ -3102,7 +3103,7 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
                 inner = object.__getattribute__(self, "_inner")
             except AttributeError:
                 result = object.__new__(SymbolicObject)
-                memo[id(self)] = result
+                record_copy(memo, self, result)
                 heap = object.__getattribute__(self, "_heap")
                 origin = object.__getattribute__(self, "_origin")
                 object.__setattr__(result, "_origin", origin)

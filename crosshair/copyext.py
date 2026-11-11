@@ -55,6 +55,18 @@ if sys.version_info >= (3, 10):
     ).values()
 
 
+def record_copy(memo: Dict, original: object, copy: object) -> None:
+    """
+    Record `copy` as the deep copy of `original` in `memo`, keeping `original`
+    alive for the lifetime of `memo`.
+
+    `__deepcopy__` implementations that recurse into their state call this before
+    recursing, so that cycles resolve to `copy`.
+    """
+    memo[id(original)] = copy
+    _keep_alive(original, memo)
+
+
 @assert_tracing(False)
 def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
     objid = id(obj)
