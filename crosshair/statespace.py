@@ -1345,11 +1345,18 @@ class StateSpace:
     def _heap_object(self, heap: SymbolicHeap, idx: int) -> object:
         if idx not in heap.objects:
             _, _, unmutated = self._heap_entries[idx]
-            # Retarget the object's own HeapRef lookups to `heap`:
-            memo: Dict = {id(self.heap): heap}
-            memo[id(memo)] = [self.heap]
-            heap.objects[idx] = deepcopyext(unmutated, CopyMode.BEST_EFFORT, memo)
+            heap.objects[idx] = self.copy_into_heap(unmutated, heap)
         return heap.objects[idx]
+
+    @assert_tracing(False)
+    def copy_into_heap(self, unmutated: object, heap: SymbolicHeap) -> object:
+        """
+        Deep-copy `unmutated`, an object that resolves HeapRef terms in `self.heap`,
+        into a copy that resolves them in `heap`.
+        """
+        memo: Dict = {id(self.heap): heap}
+        memo[id(memo)] = [self.heap]
+        return deepcopyext(unmutated, CopyMode.BEST_EFFORT, memo)
 
     def uniq(self):
         self.next_uniq += 1

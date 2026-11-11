@@ -31,6 +31,10 @@ Next Version
    objects (producing false counterexamples or hiding real ones), and caused
    ``diffbehavior`` to report differences between identical functions.
    (`see #573 <https://github.com/pschanely/CrossHair/issues/573>`__)
+ * Fixed ``__old__`` and mutation checks for arguments annotated as ``object``.
+   ``__old__`` was the same object as the mutated argument, which produced false
+   counterexamples and let unmarked mutations go unreported.
+   (`see #577 <https://github.com/pschanely/CrossHair/issues/577>`__)
  * Fixed several incorrect behaviors of symbolic ``collections.defaultdict``:
    ``in``, ``get()``, ``pop()``, and ``setdefault()`` no longer invoke the
    default factory for missing keys, and ``popitem()`` now removes the most
