@@ -558,9 +558,6 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
         self._second = second
         self._len: Optional[int] = None
 
-    def __repr__(self):
-        return f"SequenceConcatenation({self._first!r}, {self._second!r})"
-
     def __ch_pytype__(self):
         return tuple
 
@@ -637,9 +634,6 @@ class SliceView(collections.abc.Sequence, SeqBase):
         self.seq = seq
         self.start = start
         self.stop = stop
-
-    def __repr__(self):
-        return f"SliceView({self.seq!r}, {self.start!r}, {self.stop!r})"
 
     def __ch_pytype__(self):
         return tuple
