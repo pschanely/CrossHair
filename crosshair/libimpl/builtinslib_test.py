@@ -4810,3 +4810,47 @@ def test_deepcopy_independence(space, typ):
         space.add(len(inner) == 1)
         inner.clear()
         assert len(inner_copy) == 1
+
+
+def test_deepcopy_preserves_aliasing_of_inputs():
+    def f(xs: List[List[int]]) -> bool:
+        """
+        pre: len(xs) == 2
+        post: not _
+        """
+        ys = copy.deepcopy(xs)
+        return xs[0] is xs[1] and ys[0] is ys[1] and ys[0] is not xs[0]
+
+    check_states(f, POST_FAIL)
+
+
+def test_deepcopy_preserves_aliasing_from_mutation(space):
+    xs = proxy_for_type(List[List[int]], "xs")
+    with ResumedTracing():
+        space.add(len(xs) == 1)
+        xs.append(xs[0])
+        xs[0].append(7)
+        ys = copy.deepcopy(xs)
+        assert ys[0] is ys[1]
+        assert ys[0] is not xs[0]
+        assert ys[0] == xs[0]
+
+
+@pytest.mark.parametrize(
+    "typ,shallow_copy",
+    [
+        (List[List[int]], copy.copy),
+        (List[List[int]], lambda c: c[:]),
+        (List[List[int]], list),
+        (List[List[int]], lambda c: [*c]),
+        (Dict[int, List[int]], copy.copy),
+        (Dict[int, List[int]], lambda c: c.copy()),
+        (Dict[int, List[int]], dict),
+    ],
+)
+def test_shallow_copy_shares_inner_objects(space, typ, shallow_copy):
+    container = proxy_for_type(typ, "container")
+    with ResumedTracing():
+        space.add(len(container) == 1)
+        container_copy = shallow_copy(container)
+        assert _only_value(container_copy) is _only_value(container)
