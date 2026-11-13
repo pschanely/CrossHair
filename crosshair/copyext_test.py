@@ -1,11 +1,11 @@
 import sys
 from copy import deepcopy
 from threading import RLock
-from typing import Tuple
+from typing import List, Tuple
 
 import pytest
 
-from crosshair.copyext import CopyMode, deepcopyext
+from crosshair.copyext import CopyMode, copy_failures, deepcopyext
 from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.tracers import NoTracing
@@ -23,6 +23,47 @@ def test_deepcopyext_best_effort():
     output = deepcopyext(input, CopyMode.BEST_EFFORT, {})
     assert input is not output
     assert input[0] is output[0]
+
+
+class RaisesOnCopy:
+    def __deepcopy__(self, memo):
+        raise ValueError("no copies")
+
+
+def test_deepcopyext_best_effort_reports_failures():
+    uncopyable = RaisesOnCopy()
+    input = [1, [uncopyable]]
+    memo = {}
+    output = deepcopyext(input, CopyMode.BEST_EFFORT, memo)
+    assert output[1][0] is uncopyable
+    (failure,) = copy_failures(input, memo)
+    assert failure.typ is RaisesOnCopy
+    assert str(failure) == "ValueError: no copies"
+    assert copy_failures(input[1], memo) == [failure]
+
+
+def test_deepcopyext_best_effort_reports_failures_through_shared_objects():
+    shared = [RaisesOnCopy()]
+    first, second, clean = [shared], [shared], [[]]
+    memo = {}
+    for obj in (first, second, clean):
+        deepcopyext(obj, CopyMode.BEST_EFFORT, memo)
+    assert len(copy_failures(first, memo)) == 1
+    assert copy_failures(second, memo) == copy_failures(first, memo)
+    assert copy_failures(clean, memo) == []
+
+
+def test_deepcopyext_reports_lazy_heap_failures():
+    with standalone_statespace as space:
+        with NoTracing():
+            handles = proxy_for_type(List[RaisesOnCopy], "handles")
+            memo = {}
+            handles_copy = deepcopyext(handles, CopyMode.BEST_EFFORT, memo)
+            assert copy_failures(handles, memo) == []
+        space.add(len(handles_copy) == 1)
+        handles_copy[0]
+        with NoTracing():
+            assert len(copy_failures(handles, memo)) == 1
 
 
 def test_deepcopyext_symbolic_set():
