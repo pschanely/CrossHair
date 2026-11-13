@@ -33,7 +33,7 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing, smt
 from crosshair.condition_parser import ConditionExpr
-from crosshair.copyext import CopyMode, deepcopyext
+from crosshair.copyext import CopyMode, deepcopyext, record_copy
 from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
@@ -171,7 +171,7 @@ class SymbolicHeap:
     def __deepcopy__(self, memo: Dict) -> "SymbolicHeap":
         with NoTracing():
             result = SymbolicHeap()
-            memo[id(self)] = result
+            record_copy(memo, self, result)
             result.objects = deepcopyext(self.objects, CopyMode.BEST_EFFORT, memo)
         return result
 
@@ -1345,11 +1345,18 @@ class StateSpace:
     def _heap_object(self, heap: SymbolicHeap, idx: int) -> object:
         if idx not in heap.objects:
             _, _, unmutated = self._heap_entries[idx]
-            # Retarget the object's own HeapRef lookups to `heap`:
-            memo: Dict = {id(self.heap): heap}
-            memo[id(memo)] = [self.heap]
-            heap.objects[idx] = deepcopyext(unmutated, CopyMode.BEST_EFFORT, memo)
+            heap.objects[idx] = self.copy_into_heap(unmutated, heap)
         return heap.objects[idx]
+
+    @assert_tracing(False)
+    def copy_into_heap(self, unmutated: object, heap: SymbolicHeap) -> object:
+        """
+        Deep-copy `unmutated`, an object that resolves HeapRef terms in `self.heap`,
+        into a copy that resolves them in `heap`.
+        """
+        memo: Dict = {id(self.heap): heap}
+        memo[id(memo)] = [self.heap]
+        return deepcopyext(unmutated, CopyMode.BEST_EFFORT, memo)
 
     def uniq(self):
         self.next_uniq += 1

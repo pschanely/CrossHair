@@ -79,6 +79,7 @@ from crosshair.statespace import (
     CANNOT_CONFIRM,
     CONFIRMED,
     EXEC_ERR,
+    POST_ERR,
     POST_FAIL,
     MessageType,
     StateSpace,
@@ -4810,3 +4811,83 @@ def test_deepcopy_independence(space, typ):
         space.add(len(inner) == 1)
         inner.clear()
         assert len(inner_copy) == 1
+
+
+@dataclasses.dataclass
+class _Tally:
+    count: int
+
+
+@pytest.mark.parametrize("realize_copy_first", [True, False])
+def test_object_deepcopy_independence(space, realize_copy_first):
+    obj = proxy_for_type(object, "obj")
+    with ResumedTracing():
+        obj_copy = copy.deepcopy(obj)
+        assert isinstance(obj_copy, _Tally)
+        first, second = (obj_copy, obj) if realize_copy_first else (obj, obj_copy)
+        space.add(first.count == 0)
+        first.count += 1
+        assert type(second) is _Tally
+        assert second.count == 0
+
+
+def test_object_deepcopy_shares_atomic_values(space):
+    obj = proxy_for_type(object, "obj")
+    with ResumedTracing():
+        obj_copy = copy.deepcopy(obj)
+        assert isinstance(obj_copy, int)
+    assert obj._wrapped() is obj_copy._wrapped()
+
+
+def test_object_deepcopy_of_deepcopy(space):
+    obj = proxy_for_type(object, "obj")
+    with ResumedTracing():
+        obj_copy = copy.deepcopy(obj)
+        obj_copy_copy = copy.deepcopy(obj_copy)
+        assert isinstance(obj_copy_copy, _Tally)
+        space.add(obj_copy_copy.count == 0)
+        obj_copy.count += 1
+        assert obj.count == 0
+        assert obj_copy_copy.count == 0
+
+
+def test_object_deepcopy_in_container(space):
+    objs = proxy_for_type(List[object], "objs")
+    with ResumedTracing():
+        space.add(len(objs) == 1)
+        objs_copy = copy.deepcopy(objs)
+        obj_copy = objs_copy[0]
+        assert isinstance(obj_copy, _Tally)
+        space.add(obj_copy.count == 0)
+        obj_copy.count += 1
+        assert objs[0].count == 0
+
+
+def test_object_deepcopy_of_heap_element(space):
+    objs = proxy_for_type(List[object], "objs")
+    with ResumedTracing():
+        space.add(len(objs) == 1)
+        obj = objs[0]
+        obj_copy = copy.deepcopy(obj)
+        assert isinstance(obj_copy, _Tally)
+        space.add(obj_copy.count == 0)
+        obj_copy.count += 1
+        assert obj.count == 0
+
+
+def test_object_old_is_independent():
+    def f(x: object) -> None:
+        """post[x]: not isinstance(x, _Tally) or x.count == __old__.x.count + 1"""
+        if isinstance(x, _Tally):
+            x.count += 1
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_object_mutation_is_detected():
+    def f(x: object) -> None:
+        """post[]: True"""
+        if isinstance(x, _Tally):
+            x.count += 1
+
+    check_states(f, POST_ERR)

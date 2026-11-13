@@ -53,6 +53,7 @@ import typing_inspect  # type: ignore
 
 from crosshair import smt
 from crosshair.abcstring import AbcString
+from crosshair.copyext import record_copy
 from crosshair.core import (
     SymbolicFactory,
     deep_realize,
@@ -293,7 +294,7 @@ class SymbolicValue(CrossHairValue):
 
     def __deepcopy__(self, memo):
         result = copy.copy(self)
-        memo[id(self)] = result
+        record_copy(memo, self, result)
         if self.heap is not None:
             result.heap = copy.deepcopy(self.heap, memo)
         return result
@@ -3013,7 +3014,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
 def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
     other_type = type(other)
     with NoTracing():
-        mytype = symbolic_obj._typ
+        mytype = symbolic_obj.__ch_pytype__()
         if isinstance(mytype, SymbolicType):
             # This just encourages a useful type realization; we discard the result:
             other_smt_type = SymbolicType._coerce_to_smt_sort(other_type)
@@ -3031,13 +3032,47 @@ def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
     return op(obj_with_known_type, other)
 
 
+class _SymbolicObjectOrigin:
+    """
+    The type, and the lazily created value, shared by a SymbolicObject and its
+    deep copies.
+
+    Each SymbolicObject realizes to `value()` when its type is atomic and immutable,
+    and otherwise to its own copy of `value()`, which stays unmutated.
+    """
+
+    def __init__(self, varname: str, typ: Type):
+        self.varname = varname
+        self.typ: Union[type, SymbolicType] = SymbolicType(varname + "_type", Type[typ])
+        self._value: object = _MISSING
+
+    @assert_tracing(False)
+    def value(self) -> object:
+        if self._value is _MISSING:
+            pytype = realize(self.typ)
+            debug(
+                "materializing the type of symbolic",
+                self.varname,
+                "to be",
+                pytype,
+                ch_stack(),
+            )
+            self.typ = pytype
+            if pytype is object:
+                self._value = object()
+            else:
+                self._value = proxy_for_type(pytype, self.varname, allow_subtypes=False)
+        return self._value
+
+
 class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
     """
     An object with an unknown type.
     We lazily create a more specific smt-based value in hopes that an
     isinstance() check will be called before something is accessed on us.
-    Note that this class is not an SymbolicValue, but its _typ and _inner
-    members can be.
+
+    Deep copies stay lazy: they share the (possibly symbolic) type, and each
+    realizes to an independent copy of the same value.
     """
 
     @assert_tracing(False)
@@ -3046,45 +3081,39 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
             raise CrossHairInternal(f"Creating SymbolicObject with non-type {typ}")
         if isinstance(typ, CrossHairValue):
             raise CrossHairInternal(f"Creating SymbolicObject with symbolic type {typ}")
-        object.__setattr__(self, "_typ", SymbolicType(smtvar + "_type", Type[typ]))
-        object.__setattr__(self, "_space", context_statespace())
-        object.__setattr__(self, "_varname", smtvar)
+        object.__setattr__(self, "_origin", _SymbolicObjectOrigin(smtvar, typ))
+        object.__setattr__(self, "_heap", context_statespace().heap)
 
     @assert_tracing(False)
     def _realize(self):
-        object.__getattribute__(self, "_space")
-        varname = object.__getattribute__(self, "_varname")
-
-        pytype = realize(object.__getattribute__(self, "_typ"))
-        debug(
-            "materializing the type of symbolic", varname, "to be", pytype, ch_stack()
-        )
-        object.__setattr__(self, "_typ", pytype)
-        if pytype is object:
-            return object()
-        return proxy_for_type(pytype, varname, allow_subtypes=False)
+        origin = object.__getattribute__(self, "_origin")
+        heap = object.__getattribute__(self, "_heap")
+        value = origin.value()
+        if origin.typ in ATOMIC_IMMUTABLE_TYPES:
+            return value
+        return context_statespace().copy_into_heap(value, heap)
 
     def __ch_realize__(self):
         return realize(self._wrapped())
 
     def __deepcopy__(self, memo):
-        try:
-            inner = object.__getattribute__(self, "_inner")
-        except AttributeError:
-            # CrossHair will deepcopy for mutation checking.
-            # That's usually bad for LazyObjects, which want to defer their
-            # realization, so we simply don't do mutation checking for these
-            # kinds of values right now.
-            # TODO: we should do something else here; realizing the type doesn't
-            # seem THAT terrible?
-            result = self
-        else:
-            result = copy.deepcopy(inner, memo)
+        with NoTracing():
+            try:
+                inner = object.__getattribute__(self, "_inner")
+            except AttributeError:
+                result = object.__new__(SymbolicObject)
+                record_copy(memo, self, result)
+                heap = object.__getattribute__(self, "_heap")
+                origin = object.__getattribute__(self, "_origin")
+                object.__setattr__(result, "_origin", origin)
+                object.__setattr__(result, "_heap", copy.deepcopy(heap, memo))
+                return result
+        result = copy.deepcopy(inner, memo)
         memo[id(self)] = result
         return result
 
     def __ch_pytype__(self):
-        return object.__getattribute__(self, "_typ")
+        return object.__getattribute__(self, "_origin").typ
 
     @property
     def __class__(self):

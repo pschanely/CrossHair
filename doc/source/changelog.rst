@@ -31,6 +31,10 @@ Next Version
    objects (producing false counterexamples or hiding real ones), and caused
    ``diffbehavior`` to report differences between identical functions.
    (`see #573 <https://github.com/pschanely/CrossHair/issues/573>`__)
+ * Fixed ``__old__`` and mutation checks for arguments annotated as ``object``.
+   ``__old__`` was the same object as the mutated argument, which produced false
+   counterexamples and let unmarked mutations go unreported.
+   (`see #577 <https://github.com/pschanely/CrossHair/issues/577>`__)
  * Fixed ``random()`` on a ``random.Random`` argument always returning ``0.0``,
    which caused CrossHair to confirm false postconditions.
    (`see #576 <https://github.com/pschanely/CrossHair/issues/576>`__)
