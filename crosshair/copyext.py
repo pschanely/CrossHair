@@ -16,7 +16,18 @@ from copy import (  # type: ignore
 from copyreg import dispatch_table  # type: ignore
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 from crosshair.tracers import ResumedTracing
 from crosshair.util import (
@@ -49,13 +60,17 @@ class LazyCopySource:
     """
     An object whose copies create parts of themselves later.
 
-    Failures to copy those parts accumulate in `copy_failures`.
+    The failures of those parts accumulate via `add_failure_sources`.
     """
 
-    copy_failures: List[CopyFailure]
+    def __init__(self) -> None:
+        self.failure_sources: Dict["FailureSource", None] = {}
+
+    def add_failure_sources(self, sources: Iterable["FailureSource"]) -> None:
+        self.failure_sources.update(dict.fromkeys(sources))
 
 
-_FailureSource = Union[CopyFailure, LazyCopySource]
+FailureSource = Union[CopyFailure, LazyCopySource]
 
 
 class _FailureTracker:
@@ -64,10 +79,10 @@ class _FailureTracker:
     """
 
     def __init__(self) -> None:
-        self.frames: List[List[_FailureSource]] = []
-        self.reach: Dict[int, Tuple[_FailureSource, ...]] = {}
+        self.frames: List[List[FailureSource]] = []
+        self.reach: Dict[int, Tuple[FailureSource, ...]] = {}
 
-    def add(self, source: _FailureSource) -> None:
+    def add(self, source: FailureSource) -> None:
         if self.frames:
             self.frames[-1].append(source)
 
@@ -107,22 +122,50 @@ def note_lazy_copy_source(source: LazyCopySource, memo: Dict) -> None:
     _tracker(memo).add(source)
 
 
+def copy_failure_sources(obj: object, memo: Dict) -> Tuple[FailureSource, ...]:
+    """Get the sources of failures of a best-effort copy of `obj` made with `memo`."""
+    tracker: Optional[_FailureTracker] = memo.get(_TRACKER_KEY)
+    if tracker is None:
+        return ()
+    return tracker.reach.get(id(obj), ())
+
+
 def copy_failures(obj: object, memo: Dict) -> List[CopyFailure]:
     """
     Get the failures of a best-effort copy of `obj` made with `memo`.
 
     Includes failures that lazy parts of the copy (or of `obj`) have recorded so far.
     """
-    tracker: Optional[_FailureTracker] = memo.get(_TRACKER_KEY)
-    if tracker is None:
-        return []
+    return resolve_failure_sources(copy_failure_sources(obj, memo))
+
+
+def resolve_failure_sources(sources: Iterable[FailureSource]) -> List[CopyFailure]:
+    """Get the failures that `sources` have recorded so far."""
     result: Dict[CopyFailure, None] = {}
-    for source in tracker.reach.get(id(obj), ()):
+    pending = list(sources)
+    visited: Set[int] = set()
+    for source in pending:
         if isinstance(source, CopyFailure):
             result[source] = None
-        else:
-            result.update(dict.fromkeys(source.copy_failures))
+        elif id(source) not in visited:
+            visited.add(id(source))
+            pending.extend(source.failure_sources)
     return list(result)
+
+
+def deepcopy_detached(obj: object, memo: Dict) -> Tuple[Any, Tuple[FailureSource, ...]]:
+    """
+    Make a best-effort copy of `obj`, and get the sources of its failures.
+
+    The failures do not count against any object that is being copied with `memo`.
+    """
+    tracker = _tracker(memo)
+    outer_frames, tracker.frames = tracker.frames, []
+    try:
+        cpy = deepcopyext(obj, CopyMode.BEST_EFFORT, memo)
+    finally:
+        tracker.frames = outer_frames
+    return cpy, copy_failure_sources(obj, memo)
 
 
 # We need to be able to realize some types that are not deep-copyable.

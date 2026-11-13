@@ -1510,6 +1510,15 @@ def test_mutation_check_on_uncopyable_heap_object() -> None:
     )
 
 
+def test_mutation_check_ignores_uncopyable_heap_object_of_other_arg() -> None:
+    def bump_first(boxes: List[BoxWithEq], hs: List[UncopyableHandle]) -> None:
+        """post[hs]: True"""
+        if hs:
+            hs[0].n += 1
+
+    assert error_messages(bump_first) == []
+
+
 def test_old_on_uncopyable_arg() -> None:
     def bump(h: UncopyableHandle) -> int:
         """post[h]: h.n == __old__.h.n + 1"""
