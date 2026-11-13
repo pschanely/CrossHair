@@ -3,12 +3,13 @@ import datetime
 
 import pytest
 
+from crosshair.copyext import CopyMode, copy_failures, deepcopyext
 from crosshair.core import proxy_for_type
 from crosshair.libimpl.builtinslib import make_bounded_int
 from crosshair.libimpl.datetimelib import _is_leap_int
 from crosshair.statespace import CONFIRMED, EXEC_ERR, POST_FAIL, StateSpace
 from crosshair.test_util import check_states
-from crosshair.tracers import ResumedTracing
+from crosshair.tracers import NoTracing, ResumedTracing
 
 
 def test_timedelta_symbolic_months_fail() -> None:
@@ -247,3 +248,12 @@ def test_utcoffset_keeps_aware_datetime_symbolic(space, tz):
         d.utcoffset()
         assert space.is_possible(d.year == 2000)
         assert space.is_possible(d.year != 2000)
+
+
+def test_deepcopy_timezone(space):
+    tz = proxy_for_type(datetime.timezone, "tz")
+    memo = {}
+    tz_copy = deepcopyext(tz, CopyMode.BEST_EFFORT, memo)
+    assert copy_failures(tz, memo) == []
+    with ResumedTracing():
+        assert tz_copy == tz

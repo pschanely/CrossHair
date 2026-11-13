@@ -53,6 +53,7 @@ import typing_inspect  # type: ignore
 
 from crosshair import smt
 from crosshair.abcstring import AbcString
+from crosshair.copyext import CopyMode, deepcopyext
 from crosshair.core import (
     SymbolicFactory,
     deep_realize,
@@ -295,7 +296,8 @@ class SymbolicValue(CrossHairValue):
         result = copy.copy(self)
         memo[id(self)] = result
         if self.heap is not None:
-            result.heap = copy.deepcopy(self.heap, memo)
+            with NoTracing():
+                result.heap = deepcopyext(self.heap, CopyMode.BEST_EFFORT, memo)
         return result
 
     def __bool__(self):
@@ -356,6 +358,9 @@ class AtomicSymbolicValue(SymbolicValue):
 
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
+
+    def __deepcopy__(self, memo):
+        return self
 
     @classmethod
     def _ch_smt_sort(cls) -> smt.SortRef:
@@ -3031,6 +3036,12 @@ def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
     return op(obj_with_known_type, other)
 
 
+def _new_object_of_type(pytype: type, varname: str) -> object:
+    if pytype is object:
+        return object()
+    return proxy_for_type(pytype, varname, allow_subtypes=False)
+
+
 class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
     """
     An object with an unknown type.
@@ -3049,10 +3060,14 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
         object.__setattr__(self, "_typ", SymbolicType(smtvar + "_type", Type[typ]))
         object.__setattr__(self, "_space", context_statespace())
         object.__setattr__(self, "_varname", smtvar)
+        # Once copied, all copies realize to copies of one shared, unmutated value
+        # (created on first realization), each in its own heap:
+        object.__setattr__(self, "_unmutated", [])
+        object.__setattr__(self, "_heap", None)
 
     @assert_tracing(False)
     def _realize(self):
-        object.__getattribute__(self, "_space")
+        space = object.__getattribute__(self, "_space")
         varname = object.__getattribute__(self, "_varname")
 
         pytype = realize(object.__getattribute__(self, "_typ"))
@@ -3060,9 +3075,13 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
             "materializing the type of symbolic", varname, "to be", pytype, ch_stack()
         )
         object.__setattr__(self, "_typ", pytype)
-        if pytype is object:
-            return object()
-        return proxy_for_type(pytype, varname, allow_subtypes=False)
+        heap = object.__getattribute__(self, "_heap")
+        if heap is None:
+            return _new_object_of_type(pytype, varname)
+        unmutated = object.__getattribute__(self, "_unmutated")
+        if not unmutated:
+            unmutated.append(_new_object_of_type(pytype, varname))
+        return space.copy_into_heap(unmutated[0], heap)
 
     def __ch_realize__(self):
         return realize(self._wrapped())
@@ -3071,20 +3090,29 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
         try:
             inner = object.__getattribute__(self, "_inner")
         except AttributeError:
-            # CrossHair will deepcopy for mutation checking.
-            # That's usually bad for LazyObjects, which want to defer their
-            # realization, so we simply don't do mutation checking for these
-            # kinds of values right now.
-            # TODO: we should do something else here; realizing the type doesn't
-            # seem THAT terrible?
-            result = self
+            with NoTracing():
+                heap = object.__getattribute__(self, "_heap")
+                if heap is None:
+                    heap = object.__getattribute__(self, "_space").heap
+                    object.__setattr__(self, "_heap", heap)
+                result = object.__new__(SymbolicObject)
+                memo[id(self)] = result
+                for attr in ("_typ", "_space", "_varname", "_unmutated"):
+                    object.__setattr__(
+                        result, attr, object.__getattribute__(self, attr)
+                    )
+                heap_copy = deepcopyext(heap, CopyMode.BEST_EFFORT, memo)
+                object.__setattr__(result, "_heap", heap_copy)
         else:
             result = copy.deepcopy(inner, memo)
-        memo[id(self)] = result
+            memo[id(self)] = result
         return result
 
     def __ch_pytype__(self):
         return object.__getattribute__(self, "_typ")
+
+    def __ch_is_deeply_immutable__(self) -> bool:
+        return False
 
     @property
     def __class__(self):

@@ -1332,10 +1332,12 @@ class tzinfo:
             state = getstate()
         else:
             state = getattr(self, "__dict__", None) or None
+        with NoTracing():
+            cls = type(self)
         if state is None:
-            return (type(self), args)
+            return (cls, args)
         else:
-            return (type(self), args, state)
+            return (cls, args, state)
 
     def __ch_pytype__(self):
         return real_tzinfo
