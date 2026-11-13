@@ -2868,10 +2868,9 @@ _EAGER_OBJECT_SUBTYPES = with_uniform_probabilities([int, str])
 
 
 class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
-    _realization: Optional[Type] = None
-
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ):
         assert not is_tracing()
+        self._realization: Optional[Type] = None
         space = context_statespace()
         assert origin_of(typ) is type
         self.pytype_cap = object
@@ -3148,7 +3147,6 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
 
 class SymbolicCallable:
     __closure__ = None
-    __annotations__: dict = {}
 
     def __init__(self, values: Union[list, SymbolicList]):
         """
@@ -3172,6 +3170,7 @@ class SymbolicCallable:
             assert has_values
         self.values = values
         self.idx = 0
+        self.__annotations__ = {}
 
     def __copy__(self):
         with ResumedTracing():

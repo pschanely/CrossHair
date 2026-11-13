@@ -35,12 +35,20 @@ Next Version
    ``__old__`` was the same object as the mutated argument, which produced false
    counterexamples and let unmarked mutations go unreported.
    (`see #577 <https://github.com/pschanely/CrossHair/issues/577>`__)
+ * Fixed ``random()`` on a ``random.Random`` argument always returning ``0.0``,
+   which caused CrossHair to confirm false postconditions.
+   (`see #576 <https://github.com/pschanely/CrossHair/issues/576>`__)
  * Fixed several incorrect behaviors of symbolic ``collections.defaultdict``:
    ``in``, ``get()``, ``pop()``, and ``setdefault()`` no longer invoke the
    default factory for missing keys, and ``popitem()`` now removes the most
    recently inserted item.
  * Fixed symbolic ``collections.deque.maxlen`` being a method instead of an
    attribute.
+ * Fixed symbolic values exposing CrossHair's internal ``__annotations__``.
+   Symbolic lists, tuples, sets, and ``io.StringIO`` objects no longer have an
+   ``__annotations__`` attribute, symbolic types report the annotations of the
+   type they stand for, and symbolic callables report empty annotations.
+   (`see #578 <https://github.com/pschanely/CrossHair/issues/578>`__)
  * Replace black, isort, and flake8 with ruff for linting and formatting.
    (no user-facing changes)
 
