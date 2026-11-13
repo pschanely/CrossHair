@@ -1,7 +1,7 @@
 import sys
 from copy import deepcopy
 from threading import RLock
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import pytest
 
@@ -156,3 +156,12 @@ def test_fsum_accepts_dict_values_argument(space):
     d = {"a": proxy_for_type(int, "b")}
     realized_vals = deepcopyext(d.values(), CopyMode.REALIZE, {})
     assert type(next(iter(realized_vals))) is int
+
+
+def test_stdlib_deepcopy_of_symbolic_object_in_heap():
+    with standalone_statespace as space:
+        with NoTracing():
+            mapping = proxy_for_type(Dict[int, object], "mapping")
+        space.add(len(mapping) == 1)
+        value = next(iter(mapping.values()))
+        deepcopy((mapping, value))

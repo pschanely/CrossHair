@@ -39,6 +39,7 @@ from crosshair.copyext import (
     LazyCopySource,
     copy_failures,
     deepcopyext,
+    memoize_copy,
     note_lazy_copy_source,
 )
 from crosshair.smtlib import parse_smtlib_literal
@@ -181,7 +182,7 @@ class SymbolicHeap(LazyCopySource):
     def __deepcopy__(self, memo: Dict) -> "SymbolicHeap":
         with NoTracing():
             result = SymbolicHeap()
-            memo[id(self)] = result
+            memoize_copy(self, result, memo)
             note_lazy_copy_source(self, memo)
             note_lazy_copy_source(result, memo)
             result.objects = deepcopyext(self.objects, CopyMode.BEST_EFFORT, memo)

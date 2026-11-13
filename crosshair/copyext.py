@@ -96,6 +96,12 @@ def _tracker(memo: Dict) -> _FailureTracker:
     return tracker
 
 
+def memoize_copy(obj: object, cpy: object, memo: Dict) -> None:
+    """Record `cpy` as the copy of `obj` (for use in `__deepcopy__` implementations)."""
+    memo[id(obj)] = cpy
+    _keep_alive(obj, memo)
+
+
 def note_lazy_copy_source(source: LazyCopySource, memo: Dict) -> None:
     """Make the failures of `source` count against objects whose copy reaches it."""
     _tracker(memo).add(source)
