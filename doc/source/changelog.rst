@@ -31,6 +31,16 @@ Next Version
    objects (producing false counterexamples or hiding real ones), and caused
    ``diffbehavior`` to report differences between identical functions.
    (`see #573 <https://github.com/pschanely/CrossHair/issues/573>`__)
+ * Mutation checks (``post[...]``) now compare arguments with ``is`` or ``==``, and report
+   an error instead of silently skipping the check when an argument cannot be
+   deep-copied. Previously, any argument whose class does not define ``__eq__``
+   was reported as changed, and mutations of an argument that could not be
+   copied went undetected (also in ``__old__``). Arguments of type ``object``
+   are now copied for mutation checks and ``__old__``, and symbolic
+   ``datetime.timezone`` values can now be copied.
+   (see `#580 <https://github.com/pschanely/CrossHair/issues/580>`__,
+   `#574 <https://github.com/pschanely/CrossHair/issues/574>`__, and
+   `#577 <https://github.com/pschanely/CrossHair/issues/577>`__)
  * Fixed ``random()`` on a ``random.Random`` argument always returning ``0.0``,
    which caused CrossHair to confirm false postconditions.
    (`see #576 <https://github.com/pschanely/CrossHair/issues/576>`__)

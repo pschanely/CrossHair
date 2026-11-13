@@ -8,6 +8,7 @@ from crosshair import smt
 from crosshair.core import Patched, proxy_for_type
 from crosshair.statespace import (
     HeapRef,
+    HeapView,
     RootNode,
     SimpleStateSpace,
     StateSpace,
@@ -26,12 +27,12 @@ from crosshair.util import (
 def test_find_key_in_heap():
     space = SimpleStateSpace()
     listref = smt.const("listref", HeapRef)
-    listval1 = space.find_key_in_heap(listref, list, lambda t: [], space.heap)
+    listval1 = space.find_key_in_heap(listref, list, lambda t: [], HeapView(space.heap))
     assert isinstance(listval1, list)
-    listval2 = space.find_key_in_heap(listref, list, lambda t: [], space.heap)
+    listval2 = space.find_key_in_heap(listref, list, lambda t: [], HeapView(space.heap))
     assert listval1 is listval2
     dictref = smt.const("dictref", HeapRef)
-    dictval = space.find_key_in_heap(dictref, dict, lambda t: {}, space.heap)
+    dictval = space.find_key_in_heap(dictref, dict, lambda t: {}, HeapView(space.heap))
     assert dictval is not listval1
     assert isinstance(dictval, dict)
 
@@ -61,7 +62,7 @@ def test_heap_deepcopy() -> None:
     ref = smt.const("ref", HeapRef)
 
     def find_key(heap):
-        return space.find_key_in_heap(ref, list, lambda t: [], heap)
+        return space.find_key_in_heap(ref, list, lambda t: [], HeapView(heap))
 
     orig_heap = space.heap
     listval = find_key(orig_heap)
@@ -81,7 +82,7 @@ def test_heap_lookup_after_mutation_in_other_heap() -> None:
     ref = smt.const("ref", HeapRef)
 
     def find_key(heap):
-        return space.find_key_in_heap(ref, list, lambda t: [], heap)
+        return space.find_key_in_heap(ref, list, lambda t: [], HeapView(heap))
 
     other_heap = SymbolicHeap()
     find_key(other_heap).append(42)

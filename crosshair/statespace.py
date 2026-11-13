@@ -33,7 +33,15 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing, smt
 from crosshair.condition_parser import ConditionExpr
-from crosshair.copyext import CopyMode, deepcopyext
+from crosshair.copyext import (
+    CopyMode,
+    FailureSource,
+    LazyCopySource,
+    deepcopy_detached,
+    deepcopyext,
+    memoize_copy,
+    note_lazy_copy_source,
+)
 from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
@@ -163,16 +171,44 @@ class SymbolicHeap:
 
     Deep-copying a heap deep-copies its objects in the same memo, so a deep-copied
     symbolic container resolves HeapRef terms to copies of the original's objects.
+    Objects found later are copied into each heap as they are found.
+    `failure_sources` holds the sources of copy failures of each object.
     """
 
     def __init__(self) -> None:
         self.objects: Dict[int, object] = {}
+        self.failure_sources: Dict[int, Tuple[FailureSource, ...]] = {}
 
     def __deepcopy__(self, memo: Dict) -> "SymbolicHeap":
         with NoTracing():
             result = SymbolicHeap()
-            memo[id(self)] = result
-            result.objects = deepcopyext(self.objects, CopyMode.BEST_EFFORT, memo)
+            memoize_copy(self, result, memo)
+            for idx, obj in self.objects.items():
+                cpy, sources = deepcopy_detached(obj, memo)
+                result.objects[idx] = cpy
+                result.failure_sources[idx] = self.failure_sources[idx] + sources
+        return result
+
+
+class HeapView(LazyCopySource):
+    """
+    A SymbolicHeap, as one symbolic value uses it.
+
+    Records the copy failures of the heap objects found through this view.
+    Deep-copying a view deep-copies its heap, and makes the failures of both views
+    count against objects whose copy reaches the view.
+    """
+
+    def __init__(self, heap: SymbolicHeap) -> None:
+        super().__init__()
+        self.heap = heap
+
+    def __deepcopy__(self, memo: Dict) -> "HeapView":
+        with NoTracing():
+            result = HeapView(deepcopyext(self.heap, CopyMode.BEST_EFFORT, memo))
+            memoize_copy(self, result, memo)
+            note_lazy_copy_source(self, memo)
+            note_lazy_copy_source(result, memo)
         return result
 
 
@@ -1318,10 +1354,10 @@ class StateSpace:
         ref: smt.ExprRef,
         typ: Type,
         proxy_generator: Callable[[Type], object],
-        heap: SymbolicHeap,
+        view: HeapView,
     ) -> object:
         """
-        Find the object in `heap` that `ref` refers to.
+        Find the object in `view`'s heap that `ref` refers to.
 
         Calls `proxy_generator` when `ref` is distinct from all previously found
         refs. Each heap receives its own copy of that new object, taken before
@@ -1336,20 +1372,34 @@ class StateSpace:
                     continue
                 if self.smt_fork(smt.eq(curref, ref), probability_true=0.1):
                     debug("Heap key lookup", ref, ": Found existing", curref)
-                    return self._heap_object(heap, idx)
+                    return self._heap_object(view, idx)
             self._heap_entries.append((ref, typ, proxy_generator(typ)))
             debug("Heap key lookup", ref, ": Created new", name_of_type(typ))
-            return self._heap_object(heap, len(self._heap_entries) - 1)
+            return self._heap_object(view, len(self._heap_entries) - 1)
 
     @assert_tracing(False)
-    def _heap_object(self, heap: SymbolicHeap, idx: int) -> object:
+    def _heap_object(self, view: HeapView, idx: int) -> object:
+        heap = view.heap
         if idx not in heap.objects:
             _, _, unmutated = self._heap_entries[idx]
-            # Retarget the object's own HeapRef lookups to `heap`:
-            memo: Dict = {id(self.heap): heap}
-            memo[id(memo)] = [self.heap]
-            heap.objects[idx] = deepcopyext(unmutated, CopyMode.BEST_EFFORT, memo)
+            heap.objects[idx], heap.failure_sources[idx] = self.copy_into_heap(
+                unmutated, heap
+            )
+        view.add_failure_sources(heap.failure_sources[idx])
         return heap.objects[idx]
+
+    @assert_tracing(False)
+    def copy_into_heap(
+        self, unmutated: object, heap: SymbolicHeap
+    ) -> Tuple[object, Tuple[FailureSource, ...]]:
+        """
+        Deep-copy `unmutated`, retargeting its HeapRef lookups from `self.heap` to `heap`.
+
+        Returns the copy, and the sources of its copy failures.
+        """
+        memo: Dict = {id(self.heap): heap}
+        memo[id(memo)] = [self.heap]
+        return deepcopy_detached(unmutated, memo)
 
     def uniq(self):
         self.next_uniq += 1

@@ -1433,6 +1433,142 @@ def test_unpickable_args() -> None:
     check_states(dothing, POST_FAIL)
 
 
+class BoxWithoutEq:
+    def __init__(self, x: int):
+        self.x = x
+
+
+@dataclasses.dataclass
+class BoxWithEq:
+    x: int
+
+
+class UncopyableHandle:
+    def __init__(self, n: int):
+        self.n = n
+
+    def __deepcopy__(self, memo):
+        raise TypeError("cannot copy")
+
+
+def error_messages(fn) -> List[str]:
+    options = AnalysisOptionSet(max_iterations=20, per_condition_timeout=10)
+    messages = run_checkables(analyze_function(fn, options))
+    return [m.message for m in messages if m.state > MessageType.PRE_UNSAT]
+
+
+def test_mutation_check_without_eq() -> None:
+    def read_box(b: BoxWithoutEq) -> int:
+        """post[]: True"""
+        return b.x
+
+    (message,) = error_messages(read_box)
+    assert message.startswith(
+        'Cannot check that argument "b" is unchanged: a copy of it does not compare'
+        " equal to the original (does BoxWithoutEq define __eq__?)"
+    )
+
+
+def test_mutation_check_finds_change() -> None:
+    def bump(b: BoxWithEq) -> None:
+        """post[]: True"""
+        b.x += 1
+
+    (message,) = error_messages(bump)
+    assert message.startswith('Argument "b" changed when calling bump(')
+
+
+def test_mutation_check_passes_without_change() -> None:
+    def read_box(b: BoxWithEq) -> int:
+        """post[]: True"""
+        return b.x
+
+    check_states(read_box, CONFIRMED)
+
+
+def test_mutation_check_on_uncopyable_arg() -> None:
+    def bump(h: UncopyableHandle) -> None:
+        """post[]: True"""
+        h.n += 1
+
+    (message,) = error_messages(bump)
+    assert message.startswith(
+        'Cannot check that argument "h" is unchanged: h could not be copied'
+        " (TypeError: cannot copy)"
+    )
+
+
+def test_mutation_check_on_uncopyable_heap_object() -> None:
+    def bump_first(hs: List[UncopyableHandle]) -> None:
+        """post[]: True"""
+        if hs:
+            hs[0].n += 1
+
+    (message,) = error_messages(bump_first)
+    assert message.startswith(
+        'Cannot check that argument "hs" is unchanged: hs could not be copied'
+    )
+
+
+def test_mutation_check_ignores_uncopyable_heap_object_of_other_arg() -> None:
+    def bump_first(boxes: List[BoxWithEq], hs: List[UncopyableHandle]) -> None:
+        """post[hs]: True"""
+        if hs:
+            hs[0].n += 1
+
+    assert error_messages(bump_first) == []
+
+
+def test_old_on_uncopyable_arg() -> None:
+    def bump(h: UncopyableHandle) -> int:
+        """post[h]: h.n == __old__.h.n + 1"""
+        h.n += 1
+        return h.n
+
+    (message,) = error_messages(bump)
+    assert message.startswith(
+        "Cannot read __old__.h: h could not be copied (TypeError: cannot copy)"
+    )
+
+
+def test_unobserved_uncopyable_arg() -> None:
+    def bump(h: UncopyableHandle) -> int:
+        """post[h]: _ == h.n"""
+        h.n += 1
+        return h.n
+
+    check_states(bump, CONFIRMED)
+
+
+def test_counterexample_notes_uncopied_arg() -> None:
+    def bump(h: UncopyableHandle) -> int:
+        """post[h]: _ != 1"""
+        h.n += 1
+        return h.n
+
+    (message,) = error_messages(bump)
+    assert message.endswith("(h shown as after the call; could not copy the original)")
+
+
+def test_mutation_check_on_object_arg() -> None:
+    def append_to_lists(o: object) -> None:
+        """post[]: True"""
+        if isinstance(o, list):
+            o.append(1)
+
+    (message,) = error_messages(append_to_lists)
+    assert message.startswith('Argument "o" changed when calling')
+
+
+@pytest.mark.parametrize("typ", [float, List[float]])
+def test_mutation_check_allows_nan(typ) -> None:
+    def identity(x: typ) -> typ:  # type: ignore
+        """post[]: True"""
+        return x
+
+    check_states(identity, CONFIRMED)
+
+
 def test_kwargs(space):
     def callme(lu=3, **kw):
         return 42
