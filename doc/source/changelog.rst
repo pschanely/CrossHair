@@ -31,7 +31,7 @@ Next Version
    objects (producing false counterexamples or hiding real ones), and caused
    ``diffbehavior`` to report differences between identical functions.
    (`see #573 <https://github.com/pschanely/CrossHair/issues/573>`__)
- * Mutation checks (``post[...]``) now compare arguments with ``==``, and report
+ * Mutation checks (``post[...]``) now compare arguments with ``is`` or ``==``, and report
    an error instead of silently skipping the check when an argument cannot be
    deep-copied. Previously, any argument whose class does not define ``__eq__``
    was reported as changed, and mutations of an argument that could not be

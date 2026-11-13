@@ -130,7 +130,9 @@ See the `PEP 316`_ specification for details. In short:
     any argument. (no brackets means the opposite - the function may mutate
     any argument)
   - An argument passes the mutation check when a ``copy.deepcopy`` of it, taken
-    before the call, compares equal (``==``) to the argument after the call.
+    before the call, is the argument after the call (``is``), or compares equal
+    to it (``==``). This is the comparison that Python containers use, so a
+    ``float("nan")`` argument passes (``copy.deepcopy`` returns the same float).
     CrossHair reports an error when it cannot perform this check: when a copy of
     the argument does not compare equal to the original (for example, a class
     without ``__eq__``), or when the argument cannot be deep-copied. Define
