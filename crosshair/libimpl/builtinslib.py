@@ -3530,6 +3530,9 @@ class AnySymbolicStr(AbcString):
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
 
+    def __deepcopy__(self, memo):
+        return self
+
     def __ch_pytype__(self):
         return str
 
@@ -4442,6 +4445,9 @@ class SymbolicBytes(BytesLike):
         with NoTracing():
             inner = buffer_to_byte_seq(inner)
         self.inner = inner
+
+    def __deepcopy__(self, memo):
+        return self
 
     def _smt_for_unification(self, other_value: Any) -> Optional[smt.ExprRef]:
         """See :func:`~crosshair.core.smt_for_unification`.

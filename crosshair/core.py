@@ -1616,20 +1616,15 @@ def make_counterexample_message(
 
 
 class ArgumentSnapshot:
-    """Deep copies of arguments; deeply immutable arguments are not copied."""
+    """Deep copies of arguments."""
 
     def __init__(self, args: Mapping[str, object]):
         self.originals = args
-        self.copies: Dict[str, object] = {}
         self._memo: Dict = {}
-        for name, value in args.items():
-            with ResumedTracing():
-                immutable = is_deeply_immutable(value)
-            self.copies[name] = (
-                value
-                if immutable
-                else deepcopyext(value, CopyMode.BEST_EFFORT, self._memo)
-            )
+        self.copies: Dict[str, object] = {
+            name: deepcopyext(value, CopyMode.BEST_EFFORT, self._memo)
+            for name, value in args.items()
+        }
 
     def copy_failures(self, name: str) -> List[CopyFailure]:
         return copy_failures(self.originals[name], self._memo)
@@ -1638,20 +1633,25 @@ class ArgumentSnapshot:
         return [name for name in self.originals if self.copy_failures(name)]
 
 
-class _RecordingAttributes:
+class _RecordingAttributeHolder(AttributeHolder):
+    __slots__ = ("_ch_names_read",)
+
     def __init__(self, attrs: Mapping[str, object]):
-        object.__setattr__(self, "_attrs", attrs)
-        object.__setattr__(self, "_read", set())
+        self._ch_names_read: Set[str] = set()
+        object.__getattribute__(self, "__dict__").update(attrs)
 
-    def __getattr__(self, name: str) -> object:
-        attrs = object.__getattribute__(self, "_attrs")
-        if name not in attrs:
-            raise AttributeError(name)
-        object.__getattribute__(self, "_read").add(name)
-        return attrs[name]
+    def __getattribute__(self, name: str) -> object:
+        attrs = object.__getattribute__(self, "__dict__")
+        names_read = object.__getattribute__(self, "_ch_names_read")
+        if name == "__dict__":
+            names_read.update(attrs)
+        elif name in attrs:
+            names_read.add(name)
+        return object.__getattribute__(self, name)
 
-    def read_names(self) -> Set[str]:
-        return object.__getattribute__(self, "_read")
+
+def _names_read(holder: _RecordingAttributeHolder) -> Set[str]:
+    return object.__getattribute__(holder, "_ch_names_read")
 
 
 def _describe_copy_failures(failures: List[CopyFailure]) -> str:
@@ -1727,7 +1727,7 @@ def attempt_call(
         debug("Starting function body")
         with enforced_conditions.enabled_enforcement(), short_circuit, ResumedTracing():
             __return__ = unenforced_fn(*bargs, **bkwargs)
-        old_args = _RecordingAttributes(original_args.arguments)
+        old_args = _RecordingAttributeHolder(original_args.arguments)
         lcls = {
             **bound_args.arguments,
             "__return__": __return__,
@@ -1818,7 +1818,7 @@ def attempt_call(
         debug("Starting postcondition")
         with ResumedTracing():
             isok = bool(post_condition.evaluate(lcls))
-    for argname in sorted(old_args.read_names()):
+    for argname in sorted(_names_read(old_args)):
         arg_failures = snapshot.copy_failures(argname)
         if arg_failures:
             with ResumedTracing():

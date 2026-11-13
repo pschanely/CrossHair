@@ -2485,6 +2485,12 @@ class timezone(tzinfo):
         self._name = name
         return self
 
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
     def __getinitargs__(self):
         """pickle support"""
         if self._name is None:
