@@ -1,3 +1,4 @@
+import sys
 from enum import IntEnum
 
 import pytest
@@ -41,3 +42,22 @@ def test_declare_datatype():
     assert maybe.num_constructors() == 2
     some = smt.apply(maybe.some, smt.int_val(3))
     assert smt.apply(maybe.val, some).sort() == smt.int_sort
+
+
+@pytest.mark.skipif(
+    not hasattr(sys, "set_int_max_str_digits"), reason="No integer string limit"
+)
+@pytest.mark.parametrize("sign", [1, -1], ids=["positive", "negative"])
+def test_int_val_exceeds_decimal_digit_limit(sign):
+    original_limit = sys.get_int_max_str_digits()
+    try:
+        sys.set_int_max_str_digits(640)
+        value = sign * (10**700 + 123)
+        with pytest.raises(ValueError):
+            str(value)
+        literal = smt.int_val(value)
+        expected = ("-" if sign < 0 else "") + "1" + "0" * 697 + "123"
+        assert literal.as_string() == expected
+        assert sys.get_int_max_str_digits() == 640
+    finally:
+        sys.set_int_max_str_digits(original_limit)

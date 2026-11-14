@@ -5,6 +5,7 @@ Names follow SMT-LIB. Constructors never convert Python values into terms;
 use the ``*_val`` functions to build literals.
 """
 
+from decimal import Decimal
 from typing import Dict, Sequence, Tuple
 
 import z3  # type: ignore
@@ -123,9 +124,12 @@ def bool_val(value: bool) -> BoolRef:
 
 def int_val(value: int) -> IntNumRef:
     # __index__ produces a plain int for int subtypes (e.g. enums)
-    return IntNumRef(
-        Z3_mk_numeral(ctx_ref, value.__index__().__str__(), _int_sort_ast), ctx
-    )
+    value = value.__index__()
+    try:
+        numeral = value.__str__()
+    except ValueError:
+        numeral = Decimal(value).__str__()
+    return IntNumRef(Z3_mk_numeral(ctx_ref, numeral, _int_sort_ast), ctx)
 
 
 def real_val(value: object) -> ExprRef:

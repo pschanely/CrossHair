@@ -273,6 +273,22 @@ def test_float_as_bool() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.skipif(
+    not hasattr(sys, "set_int_max_str_digits"), reason="No integer string limit"
+)
+def test_int_comparison_exceeds_decimal_digit_limit(space):
+    original_limit = sys.get_int_max_str_digits()
+    try:
+        sys.set_int_max_str_digits(640)
+        value = 10**700 + 123
+        x = proxy_for_type(int, "x")
+        with ResumedTracing():
+            assert space.is_possible(x == value)
+            assert space.is_possible(x < value)
+    finally:
+        sys.set_int_max_str_digits(original_limit)
+
+
 def test_int_reverse_operators() -> None:
     def f(i: int) -> float:
         """
