@@ -154,7 +154,10 @@ import subprocess
 import sys
 from crosshair.auditwall import SideEffectDetected, engage_auditwall
 
-engage_auditwall(["subprocess.Popen:" + sys.argv[1]])
+engage_auditwall([
+    event + ":" + sys.argv[1]
+    for event in ("subprocess.Popen", "os.posix_spawn")
+])
 try:
     subprocess.run(
         ["python", "-c", "pass", sys.argv[2]],
