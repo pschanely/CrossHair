@@ -39,7 +39,7 @@ def _as_text(value: object) -> str:
 
 
 def _split_windows_command(cmd: str) -> Sequence[str]:
-    """Decode the CRT quoting used by subprocess.list2cmdline."""
+    """Invert subprocess.list2cmdline (a subset of the CRT's quoting rules)."""
     tokens = []
     argument: list[str] = []
     started = quoted = False
@@ -69,12 +69,8 @@ def _split_windows_command(cmd: str) -> Sequence[str]:
                 continue
             char = '"'
         if char == '"':
-            if quoted and index + 1 < len(cmd) and cmd[index + 1] == '"':
-                argument.append('"')
-                index += 2
-            else:
-                quoted = not quoted
-                index += 1
+            quoted = not quoted
+            index += 1
         else:
             argument.append(char)
             index += 1

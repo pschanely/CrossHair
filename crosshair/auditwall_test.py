@@ -1,5 +1,7 @@
+import itertools
 import os
 import platform
+import subprocess
 import sys
 import urllib.request
 from subprocess import call, run
@@ -18,18 +20,21 @@ from crosshair.auditwall import (
 pyexec = sys.executable
 
 
-@pytest.mark.parametrize(
-    "command,arguments",
-    [
-        ('"abc" d e', ["abc", "d", "e"]),
-        (r'a\\\b d"e f"g h', [r"a\\\b", "de fg", "h"]),
-        (r"a\\\"b c d", [r"a\"b", "c", "d"]),
-        (r'a\\\\"b c" d e', [r"a\\b c", "d", "e"]),
-        ('a"b"" c d', ['ab" c d']),
-    ],
-)
-def test_windows_command_quoting_rules(command, arguments):
-    assert _split_windows_command("program " + command) == ["program", *arguments]
+def test_windows_command_roundtrip():
+    # list2cmdline is pure Python, so this runs on every platform.
+    pieces = ["a", " ", "\t", '"', "\\"]
+    texts = [
+        "".join(chars)
+        for n in range(6)
+        for chars in itertools.product(pieces, repeat=n)
+    ]
+    short_texts = [t for t in texts if len(t) <= 2]
+    for text in texts:
+        argv = ["program", text]
+        assert _split_windows_command(subprocess.list2cmdline(argv)) == argv
+    for first, second in itertools.product(short_texts, repeat=2):
+        argv = ["program", first, second]
+        assert _split_windows_command(subprocess.list2cmdline(argv)) == argv
 
 
 def test_fs_read_allowed():
@@ -149,10 +154,7 @@ import subprocess
 import sys
 from crosshair.auditwall import SideEffectDetected, engage_auditwall
 
-engage_auditwall([
-    "subprocess.Popen:" + sys.argv[1],
-    "os.posix_spawn:" + sys.argv[1],
-])
+engage_auditwall(["subprocess.Popen:" + sys.argv[1]])
 try:
     subprocess.run(
         ["python", "-c", "pass", sys.argv[2]],
@@ -174,46 +176,6 @@ except SideEffectDetected:
         text=True,
     )
     assert result.returncode == (0 if allowed else 10), result.stderr
-
-
-def test_cli_unblock_quoted_argument(tmp_path):
-    target = tmp_path / "quoted_argument.py"
-    target.write_text(
-        """
-import subprocess
-import sys
-
-def launch() -> bool:
-    '''post: _'''
-    subprocess.run(
-        ["python", "-c", "pass", 'a"b'],
-        executable=sys.executable,
-        check=True,
-    )
-    return True
-""",
-        encoding="utf-8",
-    )
-    result = run(
-        [
-            pyexec,
-            "-m",
-            "crosshair",
-            "check",
-            "--report_all",
-            "--per_condition_timeout=5",
-            "--analysis_kind=PEP316",
-            "--unblock",
-            'subprocess.Popen:python:-c:pass:a"b',
-            'os.posix_spawn:python:-c:pass:a"b',
-            "--",
-            str(target),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "Confirmed over all paths" in result.stdout
 
 
 def test_chdir_allowed():

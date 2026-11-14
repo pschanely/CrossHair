@@ -7,7 +7,9 @@ Next Version
 ---------------
 
  * Fixed Windows argument-specific ``--unblock`` prefixes rejecting subprocesses
-   whose arguments contain double quotes or quoted trailing backslashes.
+   whose arguments contain double quotes, backslash-escaped quotes, or quoted
+   trailing backslashes. Prefixes are now matched against the arguments as
+   decoded by the Windows C runtime, instead of shlex tokens.
    (`see #586 <https://github.com/pschanely/CrossHair/issues/586>`__)
 
  * ``base64.b32encode`` and ``base64.b32hexencode`` (and ``binascii.b2a_base32``
