@@ -149,7 +149,10 @@ import subprocess
 import sys
 from crosshair.auditwall import SideEffectDetected, engage_auditwall
 
-engage_auditwall([sys.argv[1]])
+engage_auditwall([
+    "subprocess.Popen:" + sys.argv[1],
+    "os.posix_spawn:" + sys.argv[1],
+])
 try:
     subprocess.run(
         ["python", "-c", "pass", sys.argv[2]],
@@ -164,7 +167,7 @@ except SideEffectDetected:
             pyexec,
             "-c",
             program,
-            "subprocess.Popen:python:-c:pass:" + prefix_argument,
+            "python:-c:pass:" + prefix_argument,
             argument,
         ],
         capture_output=True,
@@ -200,7 +203,9 @@ def launch() -> bool:
             "--report_all",
             "--per_condition_timeout=5",
             "--analysis_kind=PEP316",
-            '--unblock=subprocess.Popen:python:-c:pass:a"b',
+            "--unblock",
+            'subprocess.Popen:python:-c:pass:a"b',
+            'os.posix_spawn:python:-c:pass:a"b',
             "--",
             str(target),
         ],
