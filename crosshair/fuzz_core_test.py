@@ -131,24 +131,30 @@ def _windows_skip_reason(seedkey):
     return None
 
 
-def _check(label, op):
+def _check(label, op, record_property):
     """Assert symbolic == concrete across this op's valid inputs, for EVERY overload
     shape it offers.  An op whose overloads differ in argument count needs one drive
     per shape (`pow(base, exp)` is a different code path from
     `pow(base, exp, mod)`), and the interesting behavior often lives outside the
     primary sig."""
-    checked = 0
-    for call in op.drives():
-        inputs = inputs_for(call, k=INPUTS_PER_OP, seedkey=op.seedkey)
-        result = run_differential(
-            call, inputs, max_pin_iters=PIN_ITERS, pin_timeout=PIN_TIMEOUT
-        )
-        checked += result.checked
-        assert result.divergence is None, (
-            f"{label} diverges on `{call.expr}` {result.divergence.describe()}"
-        )
-    if checked == 0:
-        pytest.skip(f"no drivable inputs for {label}")
+    counts = dict(checked=0, unpinned=0, unsupported=0)
+    try:
+        for call in op.drives():
+            inputs = inputs_for(call, k=INPUTS_PER_OP, seedkey=op.seedkey)
+            result = run_differential(
+                call, inputs, max_pin_iters=PIN_ITERS, pin_timeout=PIN_TIMEOUT
+            )
+            counts["checked"] += result.checked
+            counts["unpinned"] += result.unpinned
+            counts["unsupported"] += result.unsupported
+            assert result.divergence is None, (
+                f"{label} diverges on `{call.expr}` {result.divergence.describe()}"
+            )
+        if counts["checked"] == 0:
+            pytest.skip(f"no drivable inputs for {label}")
+    finally:
+        for name, count in counts.items():
+            record_property(f"differential_{name}", count)
 
 
 def _op_marks(op):
@@ -207,7 +213,37 @@ def _catalog_params():
 
 
 @pytest.mark.parametrize("key", list(_catalog_params()))
-def test_op(key):
+def test_op(key, request):
     """Symbolic-vs-concrete differential for one catalogued operation."""
     op = _CATALOG[key]
-    _check(key, op)
+    _check(
+        key, op, lambda name, count: request.node.user_properties.append((name, count))
+    )
+
+
+@pytest.mark.parametrize("checked", [0, 2])
+def test_input_counts_reported_even_when_skipped(monkeypatch, checked):
+    from types import SimpleNamespace
+
+    from crosshair import behavior_compare
+
+    call = SimpleNamespace(expr="a", arg_names=("a",))
+    op = SimpleNamespace(drives=lambda: [call, call], seedkey="counts")
+    monkeypatch.setattr(__name__ + ".inputs_for", lambda *args, **kw: [])
+    monkeypatch.setattr(
+        __name__ + ".run_differential",
+        lambda *args, **kw: behavior_compare.DiffResult(
+            checked, None, unsupported=3, unpinned=4
+        ),
+    )
+    properties = {}
+    if checked:
+        _check("counts", op, properties.__setitem__)
+    else:
+        with pytest.raises(pytest.skip.Exception):
+            _check("counts", op, properties.__setitem__)
+    assert properties == {
+        "differential_checked": checked * 2,
+        "differential_unpinned": 8,
+        "differential_unsupported": 6,
+    }

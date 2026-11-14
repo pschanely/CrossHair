@@ -478,6 +478,7 @@ class DiffResult:
     # proxy (proxy intolerance / CrosshairUnsupported) -- a modeling gap, NOT a
     # divergence.  When this is >0 and nothing diverged, the op is "unsupported".
     unsupported: int = 0
+    unpinned: int = 0  # inputs that exhausted the pinning budget
 
 
 def _union_of(types: Iterable[object]) -> object:
@@ -575,8 +576,8 @@ def run_differential(
 ) -> DiffResult:
     """Drive one operation on each of ``inputs``, comparing a symbolic run (args
     pinned to the input) against a concrete run.  Returns a ``DiffResult`` with the
-    count of inputs actually driven and the first ``Divergence`` (or None if all
-    matched).  ``max_pin_iters`` and ``pin_timeout`` bound the per-input pin search;
+    count of inputs actually driven, unpinned and unsupported input counts, and
+    the first ``Divergence`` (or None if all matched).  ``max_pin_iters`` and ``pin_timeout`` bound the per-input pin search;
     use small values when speed matters more than pinning every container shape (an
     input that can't pin in budget is simply skipped).
 
@@ -589,12 +590,14 @@ def run_differential(
 
     checked = 0
     unsupported = 0
+    unpinned = 0
     for vals in inputs:
         debug("differential:", call.expr, "with", vals)
         symbolic = run_symbolic_pinned(
             applier, arg_names, vals, max_pin_iters, pin_timeout
         )
         if symbolic is _UNPINNED:
+            unpinned += 1
             continue
         if symbolic is _UNSUPPORTED:
             # CrossHair couldn't MODEL the op on this input (the proxy was
@@ -622,5 +625,6 @@ def run_differential(
                 checked,
                 Divergence(tuple(vals), concrete, cast(ExecutionResult, symbolic)),
                 unsupported,
+                unpinned,
             )
-    return DiffResult(checked, None, unsupported)
+    return DiffResult(checked, None, unsupported, unpinned)
