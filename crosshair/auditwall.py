@@ -38,14 +38,55 @@ def _as_text(value: object) -> str:
     return os.fsdecode(value) if isinstance(value, (bytes, os.PathLike)) else str(value)
 
 
+def _split_windows_command(cmd: str) -> Sequence[str]:
+    """Decode the CRT quoting used by subprocess.list2cmdline."""
+    tokens = []
+    argument: list[str] = []
+    started = quoted = False
+    index = 0
+    while index < len(cmd):
+        char = cmd[index]
+        if char in " \t" and not quoted:
+            if started:
+                tokens.append("".join(argument))
+                argument = []
+                started = False
+            index += 1
+            continue
+        started = True
+        if char == "\\":
+            start = index
+            while index < len(cmd) and cmd[index] == "\\":
+                index += 1
+            count = index - start
+            if index == len(cmd) or cmd[index] != '"':
+                argument.extend("\\" * count)
+                continue
+            argument.extend("\\" * (count // 2))
+            if count % 2:
+                argument.append('"')
+                index += 1
+                continue
+            char = '"'
+        if char == '"':
+            if quoted and index + 1 < len(cmd) and cmd[index + 1] == '"':
+                argument.append('"')
+                index += 2
+            else:
+                quoted = not quoted
+                index += 1
+        else:
+            argument.append(char)
+            index += 1
+    if started:
+        tokens.append("".join(argument))
+    return tokens
+
+
 def _split_command_string(cmd: str) -> Sequence[str]:
-    # Split a rendered command line back into argv tokens.  On Windows the
-    # tokens were joined via subprocess.list2cmdline (so shlex in non-POSIX mode,
-    # then dropping the surrounding quotes, inverts it -- e.g. a quoted path with
-    # spaces comes back whole); elsewhere the string is a shell command line.
+    if sys.platform == "win32":
+        return _split_windows_command(cmd)
     try:
-        if sys.platform == "win32":
-            return [tok.strip('"') for tok in shlex.split(cmd, posix=False)]
         return shlex.split(cmd)
     except ValueError:
         return cmd.split()
