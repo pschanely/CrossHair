@@ -2,14 +2,34 @@ import os
 import platform
 import sys
 import urllib.request
-from subprocess import call
+from subprocess import call, run
 
-from crosshair.auditwall import SideEffectDetected, engage_auditwall
+import pytest
+
+from crosshair.auditwall import (
+    SideEffectDetected,
+    _split_windows_command,
+    engage_auditwall,
+)
 
 # audit hooks cannot be uninstalled, and we don't want to wall off the
 # testing process. Spawn subprcoesses instead.
 
 pyexec = sys.executable
+
+
+@pytest.mark.parametrize(
+    "command,arguments",
+    [
+        ('"abc" d e', ["abc", "d", "e"]),
+        (r'a\\\b d"e f"g h', [r"a\\\b", "de fg", "h"]),
+        (r"a\\\"b c d", [r"a\"b", "c", "d"]),
+        (r'a\\\\"b c" d e', [r"a\\b c", "d", "e"]),
+        ('a"b"" c d', ['ab" c d']),
+    ],
+)
+def test_windows_command_quoting_rules(command, arguments):
+    assert _split_windows_command("program " + command) == ["program", *arguments]
 
 
 def test_fs_read_allowed():
@@ -107,6 +127,93 @@ def test_popen_disallowed_with_unrelated_prefix_allowences():
     assert (
         call([pyexec, __file__, "popen", "withwall", "subprocess.Popen:echo:bye"]) == 10
     )
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "plain",
+        "two words",
+        "",
+        'a"b',
+        'a "quoted" value',
+        "two words\\",
+        "folder\\file",
+    ],
+)
+@pytest.mark.parametrize("allowed", [False, True])
+def test_popen_argument_prefixes(argument, allowed):
+    prefix_argument = argument if allowed else argument + "different"
+    program = """
+import subprocess
+import sys
+from crosshair.auditwall import SideEffectDetected, engage_auditwall
+
+engage_auditwall([
+    "subprocess.Popen:" + sys.argv[1],
+    "os.posix_spawn:" + sys.argv[1],
+])
+try:
+    subprocess.run(
+        ["python", "-c", "pass", sys.argv[2]],
+        executable=sys.executable,
+        check=True,
+    )
+except SideEffectDetected:
+    sys.exit(10)
+"""
+    result = run(
+        [
+            pyexec,
+            "-c",
+            program,
+            "python:-c:pass:" + prefix_argument,
+            argument,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == (0 if allowed else 10), result.stderr
+
+
+def test_cli_unblock_quoted_argument(tmp_path):
+    target = tmp_path / "quoted_argument.py"
+    target.write_text(
+        """
+import subprocess
+import sys
+
+def launch() -> bool:
+    '''post: _'''
+    subprocess.run(
+        ["python", "-c", "pass", 'a"b'],
+        executable=sys.executable,
+        check=True,
+    )
+    return True
+""",
+        encoding="utf-8",
+    )
+    result = run(
+        [
+            pyexec,
+            "-m",
+            "crosshair",
+            "check",
+            "--report_all",
+            "--per_condition_timeout=5",
+            "--analysis_kind=PEP316",
+            "--unblock",
+            'subprocess.Popen:python:-c:pass:a"b',
+            'os.posix_spawn:python:-c:pass:a"b',
+            "--",
+            str(target),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Confirmed over all paths" in result.stdout
 
 
 def test_chdir_allowed():

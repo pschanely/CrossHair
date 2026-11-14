@@ -6,6 +6,10 @@ Changelog
 Next Version
 ---------------
 
+ * Fixed Windows argument-specific ``--unblock`` prefixes rejecting subprocesses
+   whose arguments contain double quotes or quoted trailing backslashes.
+   (`see #586 <https://github.com/pschanely/CrossHair/issues/586>`__)
+
  * ``base64.b32encode`` and ``base64.b32hexencode`` (and ``binascii.b2a_base32``
    on Python 3.15+) now operate on symbolic bytes. Previously, Python 3.14 was
    very slow on symbolic input, and Python 3.15 realized the input.
