@@ -1493,7 +1493,7 @@ def test_mutation_check_on_uncopyable_arg() -> None:
 
     (message,) = error_messages(bump)
     assert message.startswith(
-        'Cannot check that argument "h" is unchanged: h could not be copied'
+        'Cannot check that arguments are unchanged: "h" could not be copied'
         " (TypeError: cannot copy)"
     )
 
@@ -1506,17 +1506,20 @@ def test_mutation_check_on_uncopyable_heap_object() -> None:
 
     (message,) = error_messages(bump_first)
     assert message.startswith(
-        'Cannot check that argument "hs" is unchanged: hs could not be copied'
+        "Cannot check that arguments are unchanged: an object of type"
+        " UncopyableHandle could not be copied (TypeError: cannot copy)"
     )
 
 
-def test_mutation_check_ignores_uncopyable_heap_object_of_other_arg() -> None:
-    def bump_first(boxes: List[BoxWithEq], hs: List[UncopyableHandle]) -> None:
-        """post[hs]: True"""
-        if hs:
-            hs[0].n += 1
+def test_mutation_check_with_other_uncopyable_arg() -> None:
+    def bump(boxes: List[BoxWithEq], h: UncopyableHandle) -> None:
+        """post[h]: True"""
+        h.n += 1
 
-    assert error_messages(bump_first) == []
+    (message,) = error_messages(bump)
+    assert message.startswith(
+        'Cannot check that arguments are unchanged: "h" could not be copied'
+    )
 
 
 def test_old_on_uncopyable_arg() -> None:
@@ -1527,7 +1530,7 @@ def test_old_on_uncopyable_arg() -> None:
 
     (message,) = error_messages(bump)
     assert message.startswith(
-        "Cannot read __old__.h: h could not be copied (TypeError: cannot copy)"
+        'Cannot read __old__: "h" could not be copied (TypeError: cannot copy)'
     )
 
 
@@ -1547,7 +1550,7 @@ def test_counterexample_notes_uncopied_arg() -> None:
         return h.n
 
     (message,) = error_messages(bump)
-    assert message.endswith("(h shown as after the call; could not copy the original)")
+    assert message.endswith('(could not copy "h"; shown as after the call)')
 
 
 def test_mutation_check_on_object_arg() -> None:

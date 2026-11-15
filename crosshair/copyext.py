@@ -16,23 +16,13 @@ from copy import (  # type: ignore
 from copyreg import dispatch_table  # type: ignore
 from enum import Enum
 from types import MappingProxyType
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    NamedTuple,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 from crosshair.tracers import ResumedTracing
 from crosshair.util import (
     CrossHairInternal,
     IdKeyedDict,
+    NotDeterministic,
     assert_tracing,
     ch_stack,
     debug,
@@ -60,55 +50,26 @@ class LazyCopySource:
     """
     An object whose copies create parts of themselves later.
 
-    The failures of those parts accumulate via `add_failure_sources`.
+    Failures to copy those parts accumulate in `copy_failures`.
     """
 
+    copy_failures: List[CopyFailure]
+
+
+class _CopyLog:
     def __init__(self) -> None:
-        self.failure_sources: Dict["FailureSource", None] = {}
-
-    def add_failure_sources(self, sources: Iterable["FailureSource"]) -> None:
-        self.failure_sources.update(dict.fromkeys(sources))
+        self.failures: List[CopyFailure] = []
+        self.lazy_sources: List[LazyCopySource] = []
 
 
-FailureSource = Union[CopyFailure, LazyCopySource]
+_COPY_LOG_KEY = id(_CopyLog)
 
 
-class _FailureTracker:
-    """
-    Records the copy failures reachable from each object in a best-effort copy.
-    """
-
-    def __init__(self) -> None:
-        self.frames: List[List[FailureSource]] = []
-        self.reach: Dict[int, Tuple[FailureSource, ...]] = {}
-
-    def add(self, source: FailureSource) -> None:
-        if self.frames:
-            self.frames[-1].append(source)
-
-    def add_reach_of(self, objid: int) -> None:
-        if self.frames:
-            self.frames[-1].extend(self.reach.get(objid, ()))
-
-    def enter(self) -> None:
-        self.frames.append([])
-
-    def exit(self, objid: int) -> None:
-        sources = tuple(dict.fromkeys(self.frames.pop()))
-        if sources:
-            self.reach[objid] = sources
-            if self.frames:
-                self.frames[-1].extend(sources)
-
-
-_TRACKER_KEY = id(_FailureTracker)
-
-
-def _tracker(memo: Dict) -> _FailureTracker:
-    tracker = memo.get(_TRACKER_KEY)
-    if tracker is None:
-        tracker = memo[_TRACKER_KEY] = _FailureTracker()
-    return tracker
+def _copy_log(memo: Dict) -> _CopyLog:
+    log = memo.get(_COPY_LOG_KEY)
+    if log is None:
+        log = memo[_COPY_LOG_KEY] = _CopyLog()
+    return log
 
 
 def memoize_copy(obj: object, cpy: object, memo: Dict) -> None:
@@ -118,54 +79,23 @@ def memoize_copy(obj: object, cpy: object, memo: Dict) -> None:
 
 
 def note_lazy_copy_source(source: LazyCopySource, memo: Dict) -> None:
-    """Make the failures of `source` count against objects whose copy reaches it."""
-    _tracker(memo).add(source)
+    """Make the failures of `source` count as failures of copies made with `memo`."""
+    _copy_log(memo).lazy_sources.append(source)
 
 
-def copy_failure_sources(obj: object, memo: Dict) -> Tuple[FailureSource, ...]:
-    """Get the sources of failures of a best-effort copy of `obj` made with `memo`."""
-    tracker: Optional[_FailureTracker] = memo.get(_TRACKER_KEY)
-    if tracker is None:
-        return ()
-    return tracker.reach.get(id(obj), ())
-
-
-def copy_failures(obj: object, memo: Dict) -> List[CopyFailure]:
+def copy_failures(memo: Dict) -> List[CopyFailure]:
     """
-    Get the failures of a best-effort copy of `obj` made with `memo`.
+    Get the failures of the best-effort copies made with `memo`.
 
-    Includes failures that lazy parts of the copy (or of `obj`) have recorded so far.
+    Includes failures that lazy parts of those copies have recorded so far.
     """
-    return resolve_failure_sources(copy_failure_sources(obj, memo))
-
-
-def resolve_failure_sources(sources: Iterable[FailureSource]) -> List[CopyFailure]:
-    """Get the failures that `sources` have recorded so far."""
-    result: Dict[CopyFailure, None] = {}
-    pending = list(sources)
-    visited: Set[int] = set()
-    for source in pending:
-        if isinstance(source, CopyFailure):
-            result[source] = None
-        elif id(source) not in visited:
-            visited.add(id(source))
-            pending.extend(source.failure_sources)
-    return list(result)
-
-
-def deepcopy_detached(obj: object, memo: Dict) -> Tuple[Any, Tuple[FailureSource, ...]]:
-    """
-    Make a best-effort copy of `obj`, and get the sources of its failures.
-
-    The failures do not count against any object that is being copied with `memo`.
-    """
-    tracker = _tracker(memo)
-    outer_frames, tracker.frames = tracker.frames, []
-    try:
-        cpy = deepcopyext(obj, CopyMode.BEST_EFFORT, memo)
-    finally:
-        tracker.frames = outer_frames
-    return cpy, copy_failure_sources(obj, memo)
+    log: Optional[_CopyLog] = memo.get(_COPY_LOG_KEY)
+    if log is None:
+        return []
+    result = list(log.failures)
+    for source in log.lazy_sources:
+        result.extend(source.copy_failures)
+    return result
 
 
 # We need to be able to realize some types that are not deep-copyable.
@@ -189,7 +119,6 @@ if sys.version_info >= (3, 10):
 
 @assert_tracing(False)
 def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
-    tracker = _tracker(memo) if mode == CopyMode.BEST_EFFORT else None
     objid = id(obj)
     cpy = memo.get(objid, _MISSING)
     if cpy is not _MISSING:
@@ -197,25 +126,14 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
             # we are trying to return some value that was not kept alive;
             # it may have been garbage collected and replaced.
             raise CrossHairInternal("Possibly transient value found in memo")
-        if tracker:
-            tracker.add_reach_of(objid)
         return cpy
     _keep_alive(obj, memo)
-    if tracker:
-        tracker.enter()
-        try:
-            cpy = _deepcopy_unmemoized(obj, mode, memo, tracker)
-        finally:
-            tracker.exit(objid)
-    else:
-        cpy = _deepcopy_unmemoized(obj, mode, memo, None)
+    cpy = _deepcopy_unmemoized(obj, mode, memo)
     memo[objid] = cpy
     return cpy
 
 
-def _deepcopy_unmemoized(
-    obj: object, mode: CopyMode, memo: Dict, tracker: Optional[_FailureTracker]
-) -> Any:
+def _deepcopy_unmemoized(obj: object, mode: CopyMode, memo: Dict) -> Any:
     deepconstruct_obj = obj
     if mode == CopyMode.REALIZE:
         cls = type(obj)
@@ -234,8 +152,10 @@ def _deepcopy_unmemoized(
     try:
         return _deepconstruct(deepconstruct_obj, mode, memo)
     except Exception as exc:
-        if mode == CopyMode.REGULAR or (
-            mode == CopyMode.REALIZE and not isinstance(exc, TypeError)
+        if (
+            mode == CopyMode.REGULAR
+            or isinstance(exc, NotDeterministic)
+            or (mode == CopyMode.REALIZE and not isinstance(exc, TypeError))
         ):
             raise
         debug(
@@ -248,8 +168,8 @@ def _deepcopy_unmemoized(
             "at",
             ch_stack(currently_handling=exc),
         )
-        if tracker:
-            tracker.add(CopyFailure(type(obj), exc))
+        if mode == CopyMode.BEST_EFFORT:
+            _copy_log(memo).failures.append(CopyFailure(type(obj), exc))
         return deepconstruct_obj
 
 

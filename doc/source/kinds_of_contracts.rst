@@ -130,15 +130,17 @@ See the `PEP 316`_ specification for details. In short:
     any argument. (no brackets means the opposite - the function may mutate
     any argument)
   - An argument passes the mutation check when a ``copy.deepcopy`` of it, taken
-    before the call, is the argument after the call (``is``), or compares equal
-    to it (``==``). This is the comparison that Python containers use, so a
-    ``float("nan")`` argument passes (``copy.deepcopy`` returns the same float).
-    CrossHair reports an error when it cannot perform this check: when a copy of
-    the argument does not compare equal to the original (for example, a class
-    without ``__eq__``), or when the argument cannot be deep-copied. Define
-    ``__eq__`` or ``__deepcopy__``, or list the argument in the brackets and
-    compare the relevant state with ``__old__``: ``post[b]: b.x == __old__.b.x``
-  - Reading an argument through ``__old__`` requires that it can be deep-copied.
+    before the call, compares equal to it (``==``).
+    CrossHair reports an error when the deepcopy of the argument does not
+    compare equal to the original (for example, a class without ``__eq__``).
+    Define ``__eq__``, or list the argument in the brackets and compare the
+    relevant state with ``__old__``: ``post[b]: b.x == __old__.b.x``
+    - In the extremely rare case that the deepcopy is identity-equal to the
+      original argument, it is also assumed to have passed the
+      mutation check. (this avoids flagging mutations on NaN values)
+  - Mutation checks and ``__old__`` require that **all** arguments can be
+    deep-copied, including objects that CrossHair creates inside symbolic
+    containers during the call.
 
 - If your function can validly raise certain exceptions, declare them like
   this: ``raises: IndexError, ZeroDivisionError``
