@@ -254,6 +254,6 @@ def test_deepcopy_timezone(space):
     tz = proxy_for_type(datetime.timezone, "tz")
     memo = {}
     tz_copy = deepcopyext(tz, CopyMode.BEST_EFFORT, memo)
-    assert copy_failures(tz, memo) == []
+    assert copy_failures(memo) == []
     with ResumedTracing():
         assert tz_copy == tz
