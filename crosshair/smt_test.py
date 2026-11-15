@@ -1,3 +1,4 @@
+import subprocess
 import sys
 from enum import IntEnum
 
@@ -61,3 +62,23 @@ def test_int_val_exceeds_decimal_digit_limit(sign):
         assert sys.get_int_max_str_digits() == 640
     finally:
         sys.set_int_max_str_digits(original_limit)
+
+
+@pytest.mark.parametrize("sign", [1, -1])
+def test_int_val_without_decimal_accelerator(sign):
+    script = """
+import sys
+sys.modules["_decimal"] = None
+from crosshair import smt
+sys.set_int_max_str_digits(640)
+sign = int(sys.argv[1])
+value = sign * (10**700 + 123)
+literal = smt.int_val(value)
+expected = ("-" if sign < 0 else "") + "1" + "0" * 697 + "123"
+assert literal.as_string() == expected
+assert sys.get_int_max_str_digits() == 640
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(sign)], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr

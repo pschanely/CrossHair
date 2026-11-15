@@ -5,7 +5,6 @@ Names follow SMT-LIB. Constructors never convert Python values into terms;
 use the ``*_val`` functions to build literals.
 """
 
-from decimal import Decimal
 from typing import Dict, Sequence, Tuple
 
 import z3  # type: ignore
@@ -128,7 +127,18 @@ def int_val(value: int) -> IntNumRef:
     try:
         numeral = value.__str__()
     except ValueError:
-        numeral = Decimal(value).__str__()
+        # Decimal can use Python's int-to-string conversion too. Format only
+        # small chunks, leaving the interpreter's digit limit unchanged.
+        magnitude = abs(value)
+        chunks = []
+        while magnitude:
+            magnitude, chunk = divmod(magnitude, 1_000_000_000)
+            chunks.append(chunk)
+        numeral = str(chunks.pop()) + "".join(
+            f"{chunk:09d}" for chunk in reversed(chunks)
+        )
+        if value < 0:
+            numeral = "-" + numeral
     return IntNumRef(Z3_mk_numeral(ctx_ref, numeral, _int_sort_ast), ctx)
 
 
