@@ -9,6 +9,7 @@ import re
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from fractions import Fraction
 from sys import _getframe
 from time import process_time
 from traceback import extract_stack, format_tb
@@ -205,11 +206,11 @@ def _ground_int_bits(term: smt.ExprRef) -> Optional[int]:
     simplifier left unfolded, possibly wrapped in +/-/* or to_int -- or None when
     the term isn't a recognized ground arithmetic shape (e.g. it has a free var)."""
     if z3.is_int_value(term):
-        return term.as_long().bit_length()
+        return smt.numeral_to_int(term).bit_length()
     if z3.is_rational_value(term):
         return max(
-            abs(term.numerator_as_long()).bit_length(),
-            abs(term.denominator_as_long()).bit_length(),
+            smt.numeral_to_int(term.numerator()).bit_length(),
+            smt.numeral_to_int(term.denominator()).bit_length(),
         )
     if z3.is_app(term):
         kind, kids = term.decl().kind(), term.children()
@@ -244,7 +245,7 @@ def _realize_capped_int(value: smt.ExprRef) -> Optional[int]:
     folded = z3.simplify(value, max_degree=MAX_REALIZED_INT_BITS)
     if not z3.is_int_value(folded):
         raise CrosshairUnsupported("could not realize integer", value.sexpr()[:60])
-    return folded.as_long()
+    return smt.numeral_to_int(folded)
 
 
 def is_smt_variable(expr: smt.ExprRef) -> bool:
@@ -256,7 +257,12 @@ def model_value_to_python(value: smt.ExprRef) -> object:
         if isinstance(value, z3.AlgebraicNumRef):
             # Force irrational values to be rational:
             value = value.approx(precision=20)
-        return float(value.as_fraction())
+        return float(
+            Fraction(
+                smt.numeral_to_int(value.numerator()),
+                smt.numeral_to_int(value.denominator()),
+            )
+        )
     elif z3.is_seq(value):
         ret = []
         while value.num_args() == 2:
@@ -267,8 +273,10 @@ def model_value_to_python(value: smt.ExprRef) -> object:
         return ret
     elif z3.is_fp(value):
         return parse_smtlib_literal(value.sexpr())
+    elif z3.is_int_value(value):
+        return smt.numeral_to_int(value)
     elif hasattr(value, "py_value"):
-        if z3.is_int(value) and not z3.is_int_value(value):
+        if z3.is_int(value):
             realized = _realize_capped_int(value)
             if realized is not None:
                 return realized

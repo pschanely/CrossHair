@@ -6,8 +6,9 @@ Changelog
 Next Version
 ---------------
 
- * Fixed constructing SMT integer literals above Python's decimal string
-   conversion limit without changing that limit.
+ * Symbolic integers now work with values beyond Python's integer string
+   conversion limit (``sys.set_int_max_str_digits``), both in solver
+   constraints and when realized.
    (`see #285 <https://github.com/pschanely/CrossHair/issues/285>`__)
 
  * ``base64.b32encode`` and ``base64.b32hexencode`` (and ``binascii.b2a_base32``

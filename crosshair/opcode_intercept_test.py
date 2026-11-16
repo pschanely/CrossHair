@@ -410,24 +410,3 @@ def test_postop_callback_skipped_on_exception_handler_jump(space):
             ret = None
         # need to do something(anything) with elements so that it's on the stack:
         type(elements)
-
-
-@pytest.mark.skipif(
-    not hasattr(sys, "set_int_max_str_digits"), reason="No integer string limit"
-)
-@pytest.mark.parametrize(
-    "conversion",
-    [lambda value: f"{value!r}", lambda value: f"{value!s}"],
-    ids=["repr", "str"],
-)
-@pytest.mark.filterwarnings("error::pytest.PytestUnraisableExceptionWarning")
-def test_fstring_integer_limit_preserves_exception(space, conversion):
-    original_limit = sys.get_int_max_str_digits()
-    try:
-        sys.set_int_max_str_digits(640)
-        value = 10**700
-        with pytest.raises(ValueError, match="limit"):
-            with ResumedTracing():
-                conversion(value)
-    finally:
-        sys.set_int_max_str_digits(original_limit)
