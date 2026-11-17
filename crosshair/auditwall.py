@@ -119,9 +119,12 @@ def accept(event: str, args: Tuple) -> None:
 def explain(event: str, args: Tuple) -> str:
     tokens = match_tokens(event, args)
     unblock_prefix = _encode_unblock_prefix(event, tokens)
+    option = f"--unblock={unblock_prefix}"
+    # POSIX shells interpret backslashes even inside double quotes.
+    display_option = shlex.quote(option) if os.name == "posix" else f'"{option}"'
     parts = [
         f"It's dangerous to run CrossHair on code with side effects.",
-        f'To allow this operation anyway, use "--unblock={unblock_prefix}".',
+        f"To allow this operation anyway, use {display_option}.",
     ]
     if tokens:
         parts.append("(or some colon-delimited prefix)")
