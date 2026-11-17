@@ -1,6 +1,7 @@
 import itertools
 import os
 import platform
+import shlex
 import subprocess
 import sys
 import urllib.request
@@ -142,14 +143,17 @@ def test_popen_disallowed_with_unrelated_prefix_allowences():
 
 @pytest.mark.parametrize(
     "argument",
-    ["a:b", "C:\\x\\", "\\\\srv\\share", "a\\\\b", "path\\:name", ""],
+    ["a:b", "C:\\x\\", "\\\\srv\\share", "a\\\\b", "path\\:name", "", "a'b $HOME"],
 )
 def test_explain_unblock_prefix_round_trip(argument):
     event = "subprocess.Popen"
     tokens = ("python", "-c", "pass", argument)
     event_args = (None, list(tokens), None, None)
     message = explain(event, event_args)
-    unblock_prefix = message.split('"')[1].split("=", 1)[1]
+    option = message.split("use ", 1)[1].split(". (or", 1)[0]
+    unblock_prefix = (
+        shlex.split(option)[0] if os.name == "posix" else option[1:-1]
+    ).split("=", 1)[1]
     decoded_event, decoded_tokens = _decode_unblock_prefix(unblock_prefix)
     assert decoded_event == event
 
@@ -164,7 +168,7 @@ def test_explain_unblock_prefix_round_trip(argument):
 def test_explain_without_argument_prefix():
     message = explain("custom.event", ())
 
-    assert '"--unblock=custom.event"' in message
+    assert "--unblock=custom.event" in message
     assert "colon-delimited prefix" not in message
 
 
@@ -180,7 +184,10 @@ def test_update_special_handlers_for_event_wide_prefix(monkeypatch):
 def test_update_special_handlers_for_argument_prefix(monkeypatch):
     event = "custom.event"
     args = ("a:b",)
-    prefix = explain(event, args).split('"')[1].split("=", 1)[1]
+    option = explain(event, args).split("use ", 1)[1].split(". (or", 1)[0]
+    prefix = (shlex.split(option)[0] if os.name == "posix" else option[1:-1]).split(
+        "=", 1
+    )[1]
     monkeypatch.setitem(_SPECIAL_HANDLERS, event, None)
 
     _update_special_handlers((prefix,), accept)
