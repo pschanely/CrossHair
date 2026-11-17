@@ -9,9 +9,15 @@ from subprocess import call, run
 import pytest
 
 from crosshair.auditwall import (
+    _SPECIAL_HANDLERS,
     SideEffectDetected,
+    _decode_unblock_prefix,
+    _make_prefix_based_handler,
     _split_windows_command,
+    _update_special_handlers,
+    accept,
     engage_auditwall,
+    explain,
 )
 
 # audit hooks cannot be uninstalled, and we don't want to wall off the
@@ -132,6 +138,57 @@ def test_popen_disallowed_with_unrelated_prefix_allowences():
     assert (
         call([pyexec, __file__, "popen", "withwall", "subprocess.Popen:echo:bye"]) == 10
     )
+
+
+@pytest.mark.parametrize(
+    "argument",
+    ["a:b", "C:\\x\\", "\\\\srv\\share", "a\\\\b", "path\\:name", ""],
+)
+def test_explain_unblock_prefix_round_trip(argument):
+    event = "subprocess.Popen"
+    tokens = ("python", "-c", "pass", argument)
+    event_args = (None, list(tokens), None, None)
+    message = explain(event, event_args)
+    unblock_prefix = message.split('"')[1].split("=", 1)[1]
+    decoded_event, decoded_tokens = _decode_unblock_prefix(unblock_prefix)
+    assert decoded_event == event
+
+    handler = _make_prefix_based_handler((decoded_tokens,), on_match=accept)
+
+    handler(event, event_args)
+    wrong_args = (None, list(tokens[:-1] + (argument + "different",)), None, None)
+    with pytest.raises(SideEffectDetected):
+        handler(event, wrong_args)
+
+
+def test_explain_without_argument_prefix():
+    message = explain("custom.event", ())
+
+    assert '"--unblock=custom.event"' in message
+    assert "colon-delimited prefix" not in message
+
+
+def test_update_special_handlers_for_event_wide_prefix(monkeypatch):
+    event = "custom.event"
+    monkeypatch.setitem(_SPECIAL_HANDLERS, event, None)
+
+    _update_special_handlers((event,), accept)
+
+    assert _SPECIAL_HANDLERS[event] is accept
+
+
+def test_update_special_handlers_for_argument_prefix(monkeypatch):
+    event = "custom.event"
+    args = ("a:b",)
+    prefix = explain(event, args).split('"')[1].split("=", 1)[1]
+    monkeypatch.setitem(_SPECIAL_HANDLERS, event, None)
+
+    _update_special_handlers((prefix,), accept)
+
+    handler = _SPECIAL_HANDLERS[event]
+    handler(event, args)
+    with pytest.raises(SideEffectDetected):
+        handler(event, ("a", "b"))
 
 
 @pytest.mark.parametrize(
