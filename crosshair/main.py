@@ -114,6 +114,8 @@ def command_line_parser() -> argparse.ArgumentParser:
         https://docs.python.org/3/library/audit_events.html
         You may specify colon-delimited event arguments to narrow the unblock, e.g.:
             --unblock subprocess.Popen:echo
+        Use `\\:` for a literal colon. `\\\\` now represents one literal backslash;
+        escape the doubled leading backslashes in hand-written UNC prefixes.
         Finally, `--unblock EVERYTHING` will disable all side-effect detection.
         """),
     )

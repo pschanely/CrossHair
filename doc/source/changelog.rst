@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Fixed ``--unblock`` prefixes splitting arguments that contain colons. Use
+   ``\:`` for a literal colon; ``\\`` now represents one literal backslash,
+   so hand-written UNC prefixes must escape their doubled leading backslashes.
+   ``explain()`` emits the escaped form. (`see #588
+   <https://github.com/pschanely/CrossHair/issues/588>`__)
+
  * Fixed Windows argument-specific ``--unblock`` prefixes rejecting subprocesses
    whose arguments contain double quotes, backslash-escaped quotes, or quoted
    trailing backslashes. Prefixes are now matched against the arguments as
