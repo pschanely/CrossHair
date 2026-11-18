@@ -3,6 +3,7 @@ import inspect
 import itertools
 import os
 import shlex
+import subprocess
 import sys
 import traceback
 from contextlib import contextmanager
@@ -118,14 +119,64 @@ def accept(event: str, args: Tuple) -> None:
 
 def explain(event: str, args: Tuple) -> str:
     tokens = match_tokens(event, args)
-    argstr = "".join(f":{arg}" for arg in tokens)
+    option = f"--unblock={_encode_unblock_prefix(event, tokens)}"
+    display_option = _quote_shell_argument(option, posix=os.name == "posix")
     parts = [
         f"It's dangerous to run CrossHair on code with side effects.",
-        f'To allow this operation anyway, use "--unblock={event}{argstr}".',
+        f"To allow this operation anyway, use {display_option}.",
     ]
     if tokens:
         parts.append("(or some colon-delimited prefix)")
     return " ".join(parts)
+
+
+def _quote_shell_argument(argument: str, posix: bool) -> str:
+    return shlex.quote(argument) if posix else subprocess.list2cmdline([argument])
+
+
+def _encode_unblock_prefix(event: str, tokens: Sequence[str]) -> str:
+    encoded_tokens = []
+    for token in tokens:
+        encoded = []
+        for index, char in enumerate(token):
+            if char == ":":
+                encoded.append("\\:")
+            elif char == "\\" and (
+                index + 1 == len(token) or token[index + 1] in ("\\", ":")
+            ):
+                encoded.append("\\\\")
+            else:
+                encoded.append(char)
+        encoded_tokens.append("".join(encoded))
+    return event + "".join(f":{token}" for token in encoded_tokens)
+
+
+def _decode_unblock_prefix(prefix: str) -> Tuple[str, Tuple[str, ...]]:
+    event, separator, arguments = prefix.partition(":")
+    if not separator:
+        return event, ()
+
+    tokens = []
+    token = []
+    index = 0
+    while index < len(arguments):
+        char = arguments[index]
+        if (
+            char == "\\"
+            and index + 1 < len(arguments)
+            and arguments[index + 1] in ("\\", ":")
+        ):
+            token.append(arguments[index + 1])
+            index += 2
+        elif char == ":":
+            tokens.append("".join(token))
+            token = []
+            index += 1
+        else:
+            token.append(char)
+            index += 1
+    tokens.append("".join(token))
+    return event, tuple(tokens)
 
 
 def reject(event: str, args: Tuple) -> NoReturn:
@@ -369,13 +420,14 @@ def _update_special_handlers(
     applies ``terminal`` (``accept`` / ``reject``) to the whole event, while
     ``"event:arg:prefix"`` applies it only to matching args."""
     for event, group_itr in itertools.groupby(
-        sorted(prefixes), lambda p: p.split(":", 1)[0]
+        sorted(_decode_unblock_prefix(prefix) for prefix in prefixes),
+        lambda prefix: prefix[0],
     ):
         group = tuple(group_itr)
-        if any(event == g for g in group):
+        if any(not args for _, args in group):
             _SPECIAL_HANDLERS[event] = terminal
         else:
-            args = tuple(a.split(":")[1:] for a in group)
+            args = tuple(args for _, args in group)
             _SPECIAL_HANDLERS[event] = _make_prefix_based_handler(
                 args, _SPECIAL_HANDLERS.get(event), terminal
             )

@@ -126,10 +126,21 @@ See the `PEP 316`_ specification for details. In short:
 
   - When doing so, the old values of the arguments are available in a special
     object called ``__old__``: ``post[x]: x > __old__.x``
-  - Comparison for the purposes of mutation checking is a "deep" comparison.
   - Use empty square brackets to assert that the function does **not** mutate
     any argument. (no brackets means the opposite - the function may mutate
     any argument)
+  - An argument passes the mutation check when a ``copy.deepcopy`` of it, taken
+    before the call, compares equal to it (``==``).
+    CrossHair reports an error when the deepcopy of the argument does not
+    compare equal to the original (for example, a class without ``__eq__``).
+    Define ``__eq__``, or list the argument in the brackets and compare the
+    relevant state with ``__old__``: ``post[b]: b.x == __old__.b.x``
+    - In the extremely rare case that the deepcopy is identity-equal to the
+      original argument, it is also assumed to have passed the
+      mutation check. (this avoids flagging mutations on NaN values)
+  - Mutation checks and ``__old__`` require that **all** arguments can be
+    deep-copied, including objects that CrossHair creates inside symbolic
+    containers during the call.
 
 - If your function can validly raise certain exceptions, declare them like
   this: ``raises: IndexError, ZeroDivisionError``

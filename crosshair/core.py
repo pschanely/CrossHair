@@ -57,7 +57,7 @@ from crosshair.condition_parser import (
     condition_parser,
     get_current_parser,
 )
-from crosshair.copyext import CopyMode, deepcopyext
+from crosshair.copyext import CopyFailure, CopyMode, copy_failures, deepcopyext
 from crosshair.enforce import (
     EnforcedConditions,
     NoEnforce,
@@ -1583,7 +1583,10 @@ def explore_paths(
 
 
 def make_counterexample_message(
-    conditions: Conditions, args: BoundArguments, return_val: object = None
+    conditions: Conditions,
+    args: BoundArguments,
+    return_val: object = None,
+    copy_note: str = "",
 ) -> str:
     reprer = context_statespace().extra(LazyCreationRepr)
 
@@ -1601,9 +1604,97 @@ def make_counterexample_message(
         if patch_expr:
             invocation += f" with {patch_expr}"
         if retstring == "None":
-            return f"when calling {invocation}"
+            message = f"when calling {invocation}"
         else:
-            return f"when calling {invocation} (which returns {retstring})"
+            message = f"when calling {invocation} (which returns {retstring})"
+        if copy_note:
+            message += f" ({copy_note})"
+        return message
+
+
+class ArgumentSnapshot:
+    """Best-effort deep copies of arguments."""
+
+    def __init__(self, args: Mapping[str, object]):
+        self.originals = args
+        self._memo: Dict = {}
+        self.copies: Dict[str, object] = {}
+        self.uncopied_names: List[str] = []
+        for name, value in args.items():
+            num_failures = len(self.failures())
+            cpy = deepcopyext(value, CopyMode.BEST_EFFORT, self._memo)
+            self.copies[name] = cpy
+            if cpy is value and len(self.failures()) > num_failures:
+                self.uncopied_names.append(name)
+
+    def failures(self) -> List[CopyFailure]:
+        """
+        Get the failures of the copies.
+
+        Includes failures to copy parts of symbolic containers that the copies have
+        created so far.
+        """
+        return copy_failures(self._memo)
+
+    def _failed_subject(self) -> str:
+        if self.uncopied_names:
+            return ", ".join(f'"{name}"' for name in self.uncopied_names)
+        typenames = list(dict.fromkeys(name_of_type(f.typ) for f in self.failures()))
+        if len(typenames) == 1:
+            return f"an object of type {typenames[0]}"
+        return f"objects of type {', '.join(typenames)}"
+
+    def describe_failures(self) -> str:
+        details = "; ".join(dict.fromkeys(map(str, self.failures())))
+        return f"{self._failed_subject()} could not be copied ({details})"
+
+    def counterexample_note(self) -> str:
+        if not self.failures():
+            return ""
+        if self.uncopied_names:
+            subject = self._failed_subject()
+        else:
+            subject = "parts of the arguments"
+        return f"could not copy {subject}; shown as after the call"
+
+
+class _OldUnavailable(BaseException):
+    pass
+
+
+class _UnavailableOld:
+    """Stands in for `__old__`; raises _OldUnavailable when read."""
+
+    def __getattribute__(self, name: str) -> object:
+        if name == "__dict__" or not name.startswith("__"):
+            raise _OldUnavailable
+        return object.__getattribute__(self, name)
+
+
+def _contract_error(
+    msg_gen: MessageGenerator, post_condition: ConditionExpr, detail: str
+) -> CallAnalysis:
+    debug("Contract problem:", detail)
+    message = msg_gen.make(
+        MessageType.POST_ERR,
+        detail,
+        post_condition.filename,
+        post_condition.line,
+        "",
+    )
+    return CallAnalysis(VerificationStatus.REFUTED, [message])
+
+
+@assert_tracing(False)
+def _copy_compares_equal(value: object) -> bool:
+    """Whether a deep copy of `value` (realized) compares equal to it."""
+    realized = deep_realize(value)
+    try:
+        copied = deepcopyext(realized, CopyMode.REGULAR, {})
+        with ResumedTracing():
+            return bool(copied == realized)
+    except Exception:
+        return False
 
 
 def attempt_call(
@@ -1617,7 +1708,8 @@ def attempt_call(
     msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement():
         original_args = gen_args(conditions.sig)
-        bound_args = deepcopyext(original_args, CopyMode.BEST_EFFORT, {})
+        snapshot = ArgumentSnapshot(original_args.arguments)
+    bound_args = BoundArguments(conditions.sig, snapshot.copies)  # type: ignore
 
     lcls: Mapping[str, object] = bound_args.arguments
     # In preconditions, __old__ exists but is just bound to the same args.
@@ -1662,11 +1754,16 @@ def attempt_call(
         debug("Starting function body")
         with enforced_conditions.enabled_enforcement(), short_circuit, ResumedTracing():
             __return__ = unenforced_fn(*bargs, **bkwargs)
+        old_args = (
+            _UnavailableOld()
+            if snapshot.failures()
+            else AttributeHolder(original_args.arguments)
+        )
         lcls = {
             **bound_args.arguments,
             "__return__": __return__,
             "_": __return__,
-            "__old__": AttributeHolder(original_args.arguments),
+            "__old__": old_args,
             fn.__name__: fn,
         }
 
@@ -1680,7 +1777,9 @@ def attempt_call(
         with ResumedTracing():
             e = space.detach_path(e)
         detail = name_of_type(type(e)) + ": " + str(e)
-        detail += " " + make_counterexample_message(conditions, original_args)
+        detail += " " + make_counterexample_message(
+            conditions, original_args, copy_note=snapshot.counterexample_note()
+        )
         debug("exception while evaluating function body:", detail)
         debug("exception traceback:", ch_stack(tb))
         return CallAnalysis(
@@ -1696,26 +1795,48 @@ def attempt_call(
             ],
         )
 
-    for argname, argval in bound_args.arguments.items():
-        if (
-            conditions.mutable_args is not None
-            and argname not in conditions.mutable_args
-        ):
-            old_val, new_val = original_args.arguments[argname], argval
-            with ResumedTracing():
-                if old_val != new_val:
-                    space.detach_path()
-                    detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(
-                        argname, old_val, new_val
-                    )
-                    debug("Mutablity problem:", detail)
-                    return CallAnalysis(
-                        VerificationStatus.REFUTED,
-                        [msg_gen.make(MessageType.POST_ERR, detail, None, 0, "")],
-                    )
-
     (post_condition,) = conditions.post
     assert post_condition.evaluate is not None
+    if conditions.mutable_args is not None:
+        checked_args = [
+            name for name in bound_args.arguments if name not in conditions.mutable_args
+        ]
+        if checked_args and snapshot.failures():
+            with ResumedTracing():
+                space.detach_path()
+            detail = (
+                "Cannot check that arguments are unchanged: "
+                f"{snapshot.describe_failures()}. "
+                "Define __deepcopy__, or list every argument in post[...]."
+            )
+            return _contract_error(msg_gen, post_condition, detail)
+        for argname in checked_args:
+            old_val = original_args.arguments[argname]
+            new_val = bound_args.arguments[argname]
+            with ResumedTracing():
+                try:
+                    unchanged = old_val is new_val or bool(old_val == new_val)
+                except Exception:
+                    unchanged = False
+            if unchanged:
+                continue
+            with ResumedTracing():
+                space.detach_path()
+            if _copy_compares_equal(old_val):
+                detail = f'Argument "{argname}" changed ' + make_counterexample_message(
+                    conditions, original_args, __return__
+                )
+            else:
+                typename = name_of_type(type(deep_realize(old_val)))
+                detail = (
+                    f'Cannot check that argument "{argname}" is unchanged: '
+                    "a copy of it does not compare equal to the original "
+                    f"(does {typename} define __eq__?). "
+                    f'Define __eq__, or list "{argname}" in post[...].'
+                )
+            return _contract_error(msg_gen, post_condition, detail)
+
+    old_unavailable = False
     with ExceptionFilter(expected_exceptions) as efilter:
         # TODO: re-enable post-condition short circuiting. This will require refactoring how
         # enforced conditions and short curcuiting interact, so that post-conditions are
@@ -1723,7 +1844,18 @@ def attempt_call(
         # with enforced_conditions.enabled_enforcement(), short_circuit:
         debug("Starting postcondition")
         with ResumedTracing():
-            isok = bool(post_condition.evaluate(lcls))
+            try:
+                isok = bool(post_condition.evaluate(lcls))
+            except _OldUnavailable:
+                old_unavailable = True
+    if old_unavailable:
+        with ResumedTracing():
+            space.detach_path()
+        detail = (
+            f"Cannot read __old__: {snapshot.describe_failures()}. "
+            "Define __deepcopy__, or avoid __old__."
+        )
+        return _contract_error(msg_gen, post_condition, detail)
     if efilter.ignore:
         debug("Ignored exception in postcondition.", efilter.analysis)
         return efilter.analysis
@@ -1733,7 +1865,7 @@ def attempt_call(
             e = space.detach_path(e)
         detail = name_of_type(type(e)) + ": " + str(e)
         detail += " " + make_counterexample_message(
-            conditions, original_args, __return__
+            conditions, original_args, __return__, snapshot.counterexample_note()
         )
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", ch_stack(tb))
@@ -1754,7 +1886,7 @@ def attempt_call(
         with ResumedTracing():
             space.detach_path()
         detail = "false " + make_counterexample_message(
-            conditions, original_args, __return__
+            conditions, original_args, __return__, snapshot.counterexample_note()
         )
         debug(detail)
         failures = [
@@ -1770,13 +1902,13 @@ def attempt_call(
 
 
 def _mutability_testing_hash(o: object) -> int:
-    if isinstance(o, ATOMIC_IMMUTABLE_TYPES):
-        return 0
     if hasattr(o, "__ch_is_deeply_immutable__"):
         if o.__ch_is_deeply_immutable__():  # type: ignore
             return 0
         else:
             raise TypeError
+    if isinstance(o, ATOMIC_IMMUTABLE_TYPES):
+        return 0
     typ = type(o)
     if not hasattr(typ, "__hash__"):  # TODO: test for __hash__ = None (list has this)
         raise TypeError

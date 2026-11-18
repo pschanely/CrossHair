@@ -34,7 +34,15 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing, smt
 from crosshair.condition_parser import ConditionExpr
-from crosshair.copyext import CopyMode, deepcopyext
+from crosshair.copyext import (
+    CopyFailure,
+    CopyMode,
+    LazyCopySource,
+    copy_failures,
+    deepcopyext,
+    memoize_copy,
+    note_lazy_copy_source,
+)
 from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
@@ -158,21 +166,26 @@ class CallAnalysis:
 HeapRef = smt.declare_sort("HeapRef")
 
 
-class SymbolicHeap:
+class SymbolicHeap(LazyCopySource):
     """
     Maps HeapRef terms to Python objects.
 
     Deep-copying a heap deep-copies its objects in the same memo, so a deep-copied
     symbolic container resolves HeapRef terms to copies of the original's objects.
+    Objects found later are copied into each heap as they are found; failures of
+    those copies are recorded in `copy_failures`, and count as failures of the
+    copy that created the heap.
     """
 
     def __init__(self) -> None:
         self.objects: Dict[int, object] = {}
+        self.copy_failures: List[CopyFailure] = []
 
     def __deepcopy__(self, memo: Dict) -> "SymbolicHeap":
         with NoTracing():
             result = SymbolicHeap()
-            memo[id(self)] = result
+            memoize_copy(self, result, memo)
+            note_lazy_copy_source(result, memo)
             result.objects = deepcopyext(self.objects, CopyMode.BEST_EFFORT, memo)
         return result
 
@@ -1353,11 +1366,21 @@ class StateSpace:
     def _heap_object(self, heap: SymbolicHeap, idx: int) -> object:
         if idx not in heap.objects:
             _, _, unmutated = self._heap_entries[idx]
-            # Retarget the object's own HeapRef lookups to `heap`:
-            memo: Dict = {id(self.heap): heap}
-            memo[id(memo)] = [self.heap]
-            heap.objects[idx] = deepcopyext(unmutated, CopyMode.BEST_EFFORT, memo)
+            heap.objects[idx] = self.copy_into_heap(unmutated, heap)
         return heap.objects[idx]
+
+    @assert_tracing(False)
+    def copy_into_heap(self, unmutated: object, heap: SymbolicHeap) -> object:
+        """
+        Deep-copy `unmutated`, retargeting its HeapRef lookups from `self.heap` to `heap`.
+
+        Records copy failures in `heap.copy_failures`.
+        """
+        memo: Dict = {id(self.heap): heap}
+        memo[id(memo)] = [self.heap]
+        cpy = deepcopyext(unmutated, CopyMode.BEST_EFFORT, memo)
+        heap.copy_failures.extend(copy_failures(memo))
+        return cpy
 
     def uniq(self):
         self.next_uniq += 1

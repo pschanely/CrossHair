@@ -118,6 +118,8 @@ Type Ctrl-C to stop this command.
                             https://docs.python.org/3/library/audit_events.html
                             You may specify colon-delimited event arguments to narrow the unblock, e.g.:
                                 --unblock subprocess.Popen:echo
+                            Use `\:` for a literal colon. `\\` now represents one literal backslash;
+                            escape the doubled leading backslashes in hand-written UNC prefixes.
                             Finally, `--unblock EVERYTHING` will disable all side-effect detection.
       --analysis_kind KIND  Kind of contract to check.
                             By default, the PEP316, deal, and icontract kinds are all checked.
@@ -176,6 +178,8 @@ It is more customizable than ``watch`` and produces machine-readable output.
                             https://docs.python.org/3/library/audit_events.html
                             You may specify colon-delimited event arguments to narrow the unblock, e.g.:
                                 --unblock subprocess.Popen:echo
+                            Use `\:` for a literal colon. `\\` now represents one literal backslash;
+                            escape the doubled leading backslashes in hand-written UNC prefixes.
                             Finally, `--unblock EVERYTHING` will disable all side-effect detection.
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples

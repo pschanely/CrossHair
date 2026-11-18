@@ -16,15 +16,17 @@ from copy import (  # type: ignore
 from copyreg import dispatch_table  # type: ignore
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 from crosshair.tracers import ResumedTracing
 from crosshair.util import (
     CrossHairInternal,
     IdKeyedDict,
+    NotDeterministic,
     assert_tracing,
     ch_stack,
     debug,
+    name_of_type,
 )
 
 _MISSING = object
@@ -32,8 +34,68 @@ _MISSING = object
 
 class CopyMode(int, Enum):
     REGULAR = 0
-    BEST_EFFORT = 1
+    BEST_EFFORT = 1  # Shares objects that cannot be copied; see copy_failures()
     REALIZE = 2
+
+
+class CopyFailure(NamedTuple):
+    typ: type
+    exc: Exception
+
+    def __str__(self) -> str:
+        return f"{name_of_type(type(self.exc))}: {self.exc}"
+
+
+class LazyCopySource:
+    """
+    An object whose copies create parts of themselves later.
+
+    Failures to copy those parts accumulate in `copy_failures`.
+    """
+
+    copy_failures: List[CopyFailure]
+
+
+class _CopyLog:
+    def __init__(self) -> None:
+        self.failures: List[CopyFailure] = []
+        self.lazy_sources: List[LazyCopySource] = []
+
+
+_COPY_LOG_KEY = id(_CopyLog)
+
+
+def _copy_log(memo: Dict) -> _CopyLog:
+    log = memo.get(_COPY_LOG_KEY)
+    if log is None:
+        log = memo[_COPY_LOG_KEY] = _CopyLog()
+    return log
+
+
+def memoize_copy(obj: object, cpy: object, memo: Dict) -> None:
+    """Record `cpy` as the copy of `obj` (for use in `__deepcopy__` implementations)."""
+    memo[id(obj)] = cpy
+    _keep_alive(obj, memo)
+
+
+def note_lazy_copy_source(source: LazyCopySource, memo: Dict) -> None:
+    """Make the failures of `source` count as failures of copies made with `memo`."""
+    _copy_log(memo).lazy_sources.append(source)
+
+
+def copy_failures(memo: Dict) -> List[CopyFailure]:
+    """
+    Get the failures of the best-effort copies made with `memo`.
+
+    Includes failures that lazy parts of those copies have recorded so far.
+    """
+    log: Optional[_CopyLog] = memo.get(_COPY_LOG_KEY)
+    if log is None:
+        return []
+    result = list(log.failures)
+    for source in log.lazy_sources:
+        result.extend(source.copy_failures)
+    return result
 
 
 # We need to be able to realize some types that are not deep-copyable.
@@ -64,42 +126,51 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
             # we are trying to return some value that was not kept alive;
             # it may have been garbage collected and replaced.
             raise CrossHairInternal("Possibly transient value found in memo")
-    else:
-        _keep_alive(obj, memo)
-        deepconstruct_obj = obj
-        if mode == CopyMode.REALIZE:
-            cls = type(obj)
-            if hasattr(cls, "__ch_deep_realize__"):
-                cpy = obj.__ch_deep_realize__(memo)  # type: ignore
-            elif hasattr(cls, "__ch_realize__"):
-                # Do shallow realization here, and then fall through to
-                # _deepconstruct below.
-                deepconstruct_obj = obj.__ch_realize__()  # type: ignore
-                # this transient object may be inserted into memo below
-                _keep_alive(deepconstruct_obj, memo)
-            else:
-                realization_override = _DEEP_REALIZATION_OVERRIDES.get(cls)
-                if realization_override:
-                    cpy = realization_override(obj, memo)
-        if cpy is _MISSING:
-            try:
-                cpy = _deepconstruct(deepconstruct_obj, mode, memo)
-            except TypeError as exc:
-                if mode == CopyMode.REGULAR:
-                    raise
-                debug(
-                    "Cannot copy object of type",
-                    type(obj),
-                    "ignoring",
-                    type(exc),
-                    ":",
-                    str(exc),
-                    "at",
-                    ch_stack(currently_handling=exc),
-                )
-                cpy = deepconstruct_obj
-        memo[objid] = cpy
+        return cpy
+    _keep_alive(obj, memo)
+    cpy = _deepcopy_unmemoized(obj, mode, memo)
+    memo[objid] = cpy
     return cpy
+
+
+def _deepcopy_unmemoized(obj: object, mode: CopyMode, memo: Dict) -> Any:
+    deepconstruct_obj = obj
+    if mode == CopyMode.REALIZE:
+        cls = type(obj)
+        if hasattr(cls, "__ch_deep_realize__"):
+            return obj.__ch_deep_realize__(memo)  # type: ignore
+        elif hasattr(cls, "__ch_realize__"):
+            # Do shallow realization here, and then fall through to
+            # _deepconstruct below.
+            deepconstruct_obj = obj.__ch_realize__()  # type: ignore
+            # this transient object may be inserted into memo below
+            _keep_alive(deepconstruct_obj, memo)
+        else:
+            realization_override = _DEEP_REALIZATION_OVERRIDES.get(cls)
+            if realization_override:
+                return realization_override(obj, memo)
+    try:
+        return _deepconstruct(deepconstruct_obj, mode, memo)
+    except Exception as exc:
+        if (
+            mode == CopyMode.REGULAR
+            or isinstance(exc, NotDeterministic)
+            or (mode == CopyMode.REALIZE and not isinstance(exc, TypeError))
+        ):
+            raise
+        debug(
+            "Cannot copy object of type",
+            type(obj),
+            "ignoring",
+            type(exc),
+            ":",
+            str(exc),
+            "at",
+            ch_stack(currently_handling=exc),
+        )
+        if mode == CopyMode.BEST_EFFORT:
+            _copy_log(memo).failures.append(CopyFailure(type(obj), exc))
+        return deepconstruct_obj
 
 
 if sys.version_info >= (3, 14):
