@@ -3,6 +3,7 @@ import inspect
 import itertools
 import os
 import shlex
+import subprocess
 import sys
 import traceback
 from contextlib import contextmanager
@@ -118,10 +119,8 @@ def accept(event: str, args: Tuple) -> None:
 
 def explain(event: str, args: Tuple) -> str:
     tokens = match_tokens(event, args)
-    unblock_prefix = _encode_unblock_prefix(event, tokens)
-    option = f"--unblock={unblock_prefix}"
-    # POSIX shells interpret backslashes even inside double quotes.
-    display_option = shlex.quote(option) if os.name == "posix" else f'"{option}"'
+    option = f"--unblock={_encode_unblock_prefix(event, tokens)}"
+    display_option = _quote_shell_argument(option, posix=os.name == "posix")
     parts = [
         f"It's dangerous to run CrossHair on code with side effects.",
         f"To allow this operation anyway, use {display_option}.",
@@ -129,6 +128,10 @@ def explain(event: str, args: Tuple) -> str:
     if tokens:
         parts.append("(or some colon-delimited prefix)")
     return " ".join(parts)
+
+
+def _quote_shell_argument(argument: str, posix: bool) -> str:
+    return shlex.quote(argument) if posix else subprocess.list2cmdline([argument])
 
 
 def _encode_unblock_prefix(event: str, tokens: Sequence[str]) -> str:
