@@ -259,7 +259,7 @@ class Watcher:
             self.handle_periodic()  # (keep checking for changes!)
             yield (Counter(), [])
             return
-        while pool.is_working():
+        while pool.is_working() or pool.has_result():
             result = pool.get_result(timeout=1.0)
             if result is not None:
                 _, counters, messages = result
