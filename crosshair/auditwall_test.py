@@ -13,7 +13,9 @@ from crosshair.auditwall import (
     _SPECIAL_HANDLERS,
     SideEffectDetected,
     _decode_unblock_prefix,
+    _encode_unblock_prefix,
     _make_prefix_based_handler,
+    _quote_shell_argument,
     _split_windows_command,
     _update_special_handlers,
     accept,
@@ -141,19 +143,32 @@ def test_popen_disallowed_with_unrelated_prefix_allowences():
     )
 
 
+@pytest.mark.parametrize("posix", [True, False])
 @pytest.mark.parametrize(
     "argument",
-    ["a:b", "C:\\x\\", "\\\\srv\\share", "a\\\\b", "path\\:name", "", "a'b $HOME"],
+    [
+        "a:b",
+        "C:\\x\\",
+        "\\\\srv\\share",
+        "a\\\\b",
+        "path\\:name",
+        "",
+        "a'b $HOME",
+        'print("hi")',
+        'C:\\x\\"',
+        "a&b",
+    ],
 )
-def test_explain_unblock_prefix_round_trip(argument):
+def test_unblock_option_round_trip(argument, posix):
     event = "subprocess.Popen"
     tokens = ("python", "-c", "pass", argument)
     event_args = (None, list(tokens), None, None)
-    message = explain(event, event_args)
-    option = message.split("use ", 1)[1].split(". (or", 1)[0]
-    unblock_prefix = (
-        shlex.split(option)[0] if os.name == "posix" else option[1:-1]
-    ).split("=", 1)[1]
+    option = _quote_shell_argument(
+        f"--unblock={_encode_unblock_prefix(event, tokens)}", posix
+    )
+    split_option = shlex.split(option) if posix else _split_windows_command(option)
+    assert len(split_option) == 1
+    unblock_prefix = split_option[0].split("=", 1)[1]
     decoded_event, decoded_tokens = _decode_unblock_prefix(unblock_prefix)
     assert decoded_event == event
 
@@ -163,6 +178,18 @@ def test_explain_unblock_prefix_round_trip(argument):
     wrong_args = (None, list(tokens[:-1] + (argument + "different",)), None, None)
     with pytest.raises(SideEffectDetected):
         handler(event, wrong_args)
+
+
+def test_explain_includes_quoted_unblock_option():
+    event = "subprocess.Popen"
+    tokens = ("python", "-c", 'print("hi")')
+    option = _quote_shell_argument(
+        f"--unblock={_encode_unblock_prefix(event, tokens)}", os.name == "posix"
+    )
+
+    message = explain(event, (None, list(tokens), None, None))
+
+    assert f"use {option}. (or some colon-delimited prefix)" in message
 
 
 def test_explain_without_argument_prefix():
@@ -184,10 +211,7 @@ def test_update_special_handlers_for_event_wide_prefix(monkeypatch):
 def test_update_special_handlers_for_argument_prefix(monkeypatch):
     event = "custom.event"
     args = ("a:b",)
-    option = explain(event, args).split("use ", 1)[1].split(". (or", 1)[0]
-    prefix = (shlex.split(option)[0] if os.name == "posix" else option[1:-1]).split(
-        "=", 1
-    )[1]
+    prefix = _encode_unblock_prefix(event, args)
     monkeypatch.setitem(_SPECIAL_HANDLERS, event, None)
 
     _update_special_handlers((prefix,), accept)
