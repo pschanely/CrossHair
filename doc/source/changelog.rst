@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.114
+---------------
+
  * Symbolic integers now work with values beyond Python's integer string
    conversion limit (``sys.set_int_max_str_digits``), both in solver
    constraints and when realized. Counterexamples show such integers in
