@@ -12,11 +12,13 @@ Nothing here reaches for ``crosshair.inputgen``, which needs hypothesis (a dev-o
 extra): a caller builds the ``CallSpec`` and supplies its inputs.
 """
 
+from collections import Counter
 from collections.abc import Set as AbcSet
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
+from enum import Enum
 from time import process_time
 from typing import (
     Any,
@@ -33,7 +35,6 @@ from typing import (
     Set,
     Tuple,
     Union,
-    cast,
 )
 
 from crosshair.core import (
@@ -411,8 +412,18 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
 # fuzz_core_test (assert no divergence) and the support measurement (color a cell
 # black on any divergence).
 # ---------------------------------------------------------------------------
-_UNPINNED = object()  # could not pin a symbolic value to a given concrete input
-_UNSUPPORTED = object()  # pinned fine, but the op rejected the symbolic proxy
+
+
+class SkipReason(Enum):
+    """Why ``run_differential`` did not compare an input."""
+
+    UNPINNED = "unpinned"  # no path pinned the symbolic args within the budget
+    UNSUPPORTED = "unsupported"  # pinned, but the op rejected the symbolic proxy
+    ERRORED = "errored"  # the engine failed (UnknownSatisfiability, internal error)
+    NONDETERMINISTIC = "nondeterministic"  # two concrete runs disagreed
+    OPAQUE = "opaque"  # the concrete result is not value-comparable
+
+
 # Thorough defaults (the support measurement's "leave no divergence unfound"
 # budget).  A latency-sensitive caller (fuzz_core_test) passes a much smaller
 # budget: nearly every input that pins at all does so on the first iteration in
@@ -474,11 +485,7 @@ class Divergence:
 class DiffResult:
     checked: int  # number of inputs actually driven (pinned + run) symbolically
     divergence: Optional[Divergence]  # first symbolic-vs-concrete mismatch, if any
-    # inputs where CrossHair could pin the value but the op REJECTED the symbolic
-    # proxy (proxy intolerance / CrosshairUnsupported) -- a modeling gap, NOT a
-    # divergence.  When this is >0 and nothing diverged, the op is "unsupported".
-    unsupported: int = 0
-    unpinned: int = 0  # inputs that exhausted the pinning budget
+    skipped: Counter[SkipReason] = field(default_factory=Counter)
 
 
 def _union_of(types: Iterable[object]) -> object:
@@ -515,11 +522,11 @@ def run_symbolic_pinned(
     concrete_vals: Sequence[object],
     max_pin_iters: int = _DIFF_MAX_PIN_ITERS,
     pin_timeout: float = _DIFF_PIN_TIMEOUT,
-) -> object:
+) -> Union[ExecutionResult, SkipReason]:
     """Run ``applier(*symbolic)`` with each symbolic arg pinned to its concrete
-    value; return the ExecutionResult, or ``_UNPINNED`` if no path could be
-    pinned within the budget.  ``pin_timeout`` caps each pin-and-run attempt (in
-    process-time seconds)."""
+    value; return the ExecutionResult, or the ``SkipReason`` it could not be
+    obtained.  ``pin_timeout`` caps each pin-and-run attempt (in process-time
+    seconds)."""
     search_root = RootNode()
     with COMPOSITE_TRACER, NoTracing():
         for _itr in range(1, max_pin_iters + 1):
@@ -547,7 +554,7 @@ def run_symbolic_pinned(
                 if isinstance(
                     res.exc, Exception
                 ) and suspected_proxy_intolerance_exception(res.exc):
-                    return _UNSUPPORTED
+                    return SkipReason.UNSUPPORTED
                 return res
             except IgnoreAttempt:
                 pass  # this path didn't match the concrete value; try another
@@ -557,15 +564,13 @@ def run_symbolic_pinned(
                 # The engine explicitly can't model this op here -- a coverage gap,
                 # not a divergence.  (The op's OWN exceptions are Exception
                 # subclasses, caught inside summarize_execution and compared.)
-                return _UNSUPPORTED
+                return SkipReason.UNSUPPORTED
             except BaseException:
-                # UnknownSatisfiability / CrossHairInternal etc. -- "couldn't
-                # check" (as opposed to "provably unsupported"); skip the input.
-                return _UNPINNED
+                return SkipReason.ERRORED
             _analysis, exhausted = space.bubble_status(CallAnalysis())
             if exhausted:
-                return _UNPINNED
-    return _UNPINNED
+                return SkipReason.UNPINNED
+    return SkipReason.UNPINNED
 
 
 def run_differential(
@@ -576,10 +581,11 @@ def run_differential(
 ) -> DiffResult:
     """Drive one operation on each of ``inputs``, comparing a symbolic run (args
     pinned to the input) against a concrete run.  Returns a ``DiffResult`` with the
-    count of inputs actually driven, unpinned and unsupported input counts, and
-    the first ``Divergence`` (or None if all matched).  ``max_pin_iters`` and ``pin_timeout`` bound the per-input pin search;
-    use small values when speed matters more than pinning every container shape (an
-    input that can't pin in budget is simply skipped).
+    count of inputs actually driven, the per-reason count of skipped inputs, and
+    the first ``Divergence`` (or None if all matched).  ``max_pin_iters`` and
+    ``pin_timeout`` bound the per-input pin search; use small values when speed
+    matters more than pinning every container shape (an input that can't pin in
+    budget is skipped as ``SkipReason.UNPINNED``).
 
     Generate ``inputs`` with ``crosshair.inputgen.inputs_for(call)``, which fits
     them to ``call``'s overload shape."""
@@ -589,21 +595,14 @@ def run_differential(
         return call.invoke(vs)
 
     checked = 0
-    unsupported = 0
-    unpinned = 0
+    skipped: Counter[SkipReason] = Counter()
     for vals in inputs:
         debug("differential:", call.expr, "with", vals)
         symbolic = run_symbolic_pinned(
             applier, arg_names, vals, max_pin_iters, pin_timeout
         )
-        if symbolic is _UNPINNED:
-            unpinned += 1
-            continue
-        if symbolic is _UNSUPPORTED:
-            # CrossHair couldn't MODEL the op on this input (the proxy was
-            # rejected) -- incompleteness, not unsoundness.  Tally it separately so
-            # callers can tell "unsupported" from "no divergence found".
-            unsupported += 1
+        if isinstance(symbolic, SkipReason):
+            skipped[symbolic] += 1
             continue
         concrete = summarize_execution(applier, deepcopy(list(vals)), detach_path=False)
         # Nondeterministic op?  If a second concrete run disagrees, the output
@@ -613,18 +612,17 @@ def run_differential(
             applier, deepcopy(list(vals)), detach_path=False
         )
         if concrete != concrete2:
+            skipped[SkipReason.NONDETERMINISTIC] += 1
             continue
         if concrete.exc is None and _is_opaque(concrete.ret):
             # Output is (or contains) an identity-eq value -- not value-comparable,
             # so a symbolic-vs-concrete mismatch here is spurious (C vs Python
-            # reimpl).  Don't count it; the support map greys these too.
+            # reimpl).  The support map greys these too.
+            skipped[SkipReason.OPAQUE] += 1
             continue
         checked += 1
         if concrete != symbolic:
             return DiffResult(
-                checked,
-                Divergence(tuple(vals), concrete, cast(ExecutionResult, symbolic)),
-                unsupported,
-                unpinned,
+                checked, Divergence(tuple(vals), concrete, symbolic), skipped
             )
-    return DiffResult(checked, None, unsupported, unpinned)
+    return DiffResult(checked, None, skipped)

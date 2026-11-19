@@ -20,13 +20,14 @@ by Python version and solver timing -- see the note there).
 """
 
 import sys
+from collections import Counter
 
 import pytest
 
 pytest.importorskip("hypothesis")  # imported by crosshair.inputgen
 
 import crosshair.core_and_libs  # noqa: F401  -- ensure patches/plugins load
-from crosshair.behavior_compare import run_differential
+from crosshair.behavior_compare import SkipReason, run_differential
 from crosshair.inputgen import catalog, inputs_for
 
 # Inputs checked per operation (each pinned symbolic-vs-concrete).  Small for CI.
@@ -136,25 +137,27 @@ def _check(label, op, record_property):
     shape it offers.  An op whose overloads differ in argument count needs one drive
     per shape (`pow(base, exp)` is a different code path from
     `pow(base, exp, mod)`), and the interesting behavior often lives outside the
-    primary sig."""
-    counts = dict(checked=0, unpinned=0, unsupported=0)
+    primary sig.  Records the checked and per-reason skipped input counts with
+    ``record_property``, whether the op passes, skips, or diverges."""
+    checked = 0
+    skipped: Counter = Counter()
     try:
         for call in op.drives():
             inputs = inputs_for(call, k=INPUTS_PER_OP, seedkey=op.seedkey)
             result = run_differential(
                 call, inputs, max_pin_iters=PIN_ITERS, pin_timeout=PIN_TIMEOUT
             )
-            counts["checked"] += result.checked
-            counts["unpinned"] += result.unpinned
-            counts["unsupported"] += result.unsupported
+            checked += result.checked
+            skipped += result.skipped
             assert result.divergence is None, (
                 f"{label} diverges on `{call.expr}` {result.divergence.describe()}"
             )
-        if counts["checked"] == 0:
+        if checked == 0:
             pytest.skip(f"no drivable inputs for {label}")
     finally:
-        for name, count in counts.items():
-            record_property(f"differential_{name}", count)
+        record_property("differential_checked", checked)
+        for reason in SkipReason:
+            record_property(f"differential_{reason.value}", skipped[reason])
 
 
 def _op_marks(op):
@@ -213,12 +216,9 @@ def _catalog_params():
 
 
 @pytest.mark.parametrize("key", list(_catalog_params()))
-def test_op(key, request):
+def test_op(key, record_property):
     """Symbolic-vs-concrete differential for one catalogued operation."""
-    op = _CATALOG[key]
-    _check(
-        key, op, lambda name, count: request.node.user_properties.append((name, count))
-    )
+    _check(key, _CATALOG[key], record_property)
 
 
 @pytest.mark.parametrize("checked", [0, 2])
@@ -233,7 +233,9 @@ def test_input_counts_reported_even_when_skipped(monkeypatch, checked):
     monkeypatch.setattr(
         __name__ + ".run_differential",
         lambda *args, **kw: behavior_compare.DiffResult(
-            checked, None, unsupported=3, unpinned=4
+            checked,
+            None,
+            Counter({SkipReason.UNSUPPORTED: 3, SkipReason.UNPINNED: 4}),
         ),
     )
     properties = {}
@@ -246,4 +248,7 @@ def test_input_counts_reported_even_when_skipped(monkeypatch, checked):
         "differential_checked": checked * 2,
         "differential_unpinned": 8,
         "differential_unsupported": 6,
+        "differential_errored": 0,
+        "differential_nondeterministic": 0,
+        "differential_opaque": 0,
     }

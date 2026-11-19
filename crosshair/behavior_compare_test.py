@@ -1,10 +1,12 @@
+import itertools
+from collections import Counter
+
 import pytest
 
 from crosshair.behavior_compare import (
-    _UNPINNED,
-    _UNSUPPORTED,
     UNREALIZABLE,
     CallSpec,
+    SkipReason,
     compare_returns,
     flexible_equal,
     run_differential,
@@ -16,6 +18,7 @@ from crosshair.core import deep_realize, proxy_for_type
 from crosshair.core_and_libs import standalone_statespace
 from crosshair.libimpl.iolib import BackedStringIO
 from crosshair.tracers import ResumedTracing
+from crosshair.util import CrossHairInternal
 
 
 def test_flexible_equal():
@@ -123,8 +126,7 @@ def test_run_symbolic_pinned_descends_into_nested_containers(value):
         return x
 
     result = run_symbolic_pinned(grab, ["x"], [value])
-    assert result is not _UNPINNED
-    assert result is not _UNSUPPORTED
+    assert not isinstance(result, SkipReason)
     assert captured[-1] == value
 
 
@@ -132,8 +134,7 @@ def test_run_differential_reports_pin_budget_exhaustion():
     call = CallSpec(abs, "abs(a)", ("a",), {}, 0)
     result = run_differential(call, [(-1,), (0,), (1,)], max_pin_iters=0)
     assert result.checked == 0
-    assert result.unpinned == 3
-    assert result.unsupported == 0
+    assert result.skipped == Counter({SkipReason.UNPINNED: 3})
     assert result.divergence is None
 
 
@@ -142,13 +143,38 @@ def test_run_differential_keeps_counts_before_divergence(monkeypatch):
 
     call = CallSpec(abs, "abs(a)", ("a",), {}, 0)
     wrong = summarize_execution(lambda a: 99, [1], detach_path=False)
-    results = iter([_UNPINNED, _UNSUPPORTED, wrong])
+    results = iter([SkipReason.UNPINNED, SkipReason.UNSUPPORTED, wrong])
     monkeypatch.setattr(
         behavior_compare, "run_symbolic_pinned", lambda *args: next(results)
     )
     result = run_differential(call, [(1,), (1,), (1,), (1,)])
     assert result.checked == 1
-    assert result.unpinned == 1
-    assert result.unsupported == 1
+    assert result.skipped == Counter(
+        {SkipReason.UNPINNED: 1, SkipReason.UNSUPPORTED: 1}
+    )
     assert result.divergence is not None
     assert result.divergence.args == (1,)
+
+
+def _raise_internal(a):
+    raise CrossHairInternal("boom")
+
+
+_OPAQUE = object()
+_COUNTER = itertools.count()
+
+
+@pytest.mark.parametrize(
+    "fn,reason",
+    [
+        (_raise_internal, SkipReason.ERRORED),
+        (lambda a: next(_COUNTER), SkipReason.NONDETERMINISTIC),
+        (lambda a: _OPAQUE, SkipReason.OPAQUE),
+    ],
+)
+def test_run_differential_counts_skip_reasons(fn, reason):
+    call = CallSpec(fn, "f(a)", ("a",), {"f": fn}, 0)
+    result = run_differential(call, [(1,), (2,)])
+    assert result.checked == 0
+    assert result.skipped == Counter({reason: 2})
+    assert result.divergence is None
