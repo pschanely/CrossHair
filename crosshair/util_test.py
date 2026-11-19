@@ -183,6 +183,14 @@ def test_eval_friendly_repr():
         assert repr(Color.RED) == "<Color.RED: 0>"
 
 
+def test_eval_friendly_repr_beyond_digit_limit(small_int_str_digit_limit):
+    from crosshair.tracers import COMPOSITE_TRACER, NoTracing, PushedModule
+
+    with COMPOSITE_TRACER, PushedModule(PatchingModule()), NoTracing():
+        assert eval_friendly_repr(10**700) == hex(10**700)
+        assert eval_friendly_repr(-(10**700)) == hex(-(10**700))
+
+
 def test_renamed_function():
     def crash_on_seven(x):
         if x == 7:

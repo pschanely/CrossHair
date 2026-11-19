@@ -6,6 +6,11 @@ Changelog
 Next Version
 ---------------
 
+ * Symbolic integers now work with values beyond Python's integer string
+   conversion limit (``sys.set_int_max_str_digits``), both in solver
+   constraints and when realized. Counterexamples show such integers in
+   hexadecimal.
+   (`see #285 <https://github.com/pschanely/CrossHair/issues/285>`__)
  * Fixed ``--unblock`` prefixes splitting arguments that contain colons. Use
    ``\:`` for a literal colon; ``\\`` now represents one literal backslash,
    so hand-written UNC prefixes must escape their doubled leading backslashes.

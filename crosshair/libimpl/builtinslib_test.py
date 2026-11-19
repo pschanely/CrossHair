@@ -273,6 +273,15 @@ def test_float_as_bool() -> None:
     check_states(f, CONFIRMED)
 
 
+def test_int_beyond_digit_limit(space, small_int_str_digit_limit):
+    value = 10**700 + 123
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        assert space.is_possible(x < value)
+        space.add(x == value)
+        assert realize(x) == value
+
+
 def test_int_reverse_operators() -> None:
     def f(i: int) -> float:
         """

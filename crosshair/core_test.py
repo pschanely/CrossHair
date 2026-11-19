@@ -1052,6 +1052,22 @@ def test_exception_with_symbolic_arg_in_postcondition() -> None:
     assert actual == expected
 
 
+def test_counterexample_beyond_digit_limit(small_int_str_digit_limit) -> None:
+    def f(x: int) -> int:
+        """
+        post: _ != 10**700 + 123
+        """
+        return x
+
+    big = hex(10**700 + 123)
+    actual, expected = check_messages(
+        analyze_function(f),
+        state=MessageType.POST_FAIL,
+        message=f"false when calling f({big}) (which returns {big})",
+    )
+    assert actual == expected
+
+
 def test_exception_with_symbolic_arg_in_precondition() -> None:
     def f(x: int):
         """

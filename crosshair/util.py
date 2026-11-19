@@ -558,7 +558,13 @@ class EvalFriendlyReprContext:
                 repr_fn = callable_identifier
             else:
                 repr_fn = repr
-            str_or_ref = repr_fn(obj)
+            try:
+                str_or_ref = repr_fn(obj)
+            except ValueError:
+                if typ != int:
+                    raise
+                # Beyond the integer string conversion limit:
+                str_or_ref = hex(obj)
             if isinstance(str_or_ref, ReferencedIdentifier):
                 self.repr_references.add(str_or_ref)
                 return str_or_ref.qualname

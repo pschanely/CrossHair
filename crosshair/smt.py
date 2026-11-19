@@ -21,6 +21,7 @@ from z3 import (
     Z3_get_app_decl,
     Z3_get_ast_kind,
     Z3_get_decl_kind,
+    Z3_get_numeral_string,
     Z3_mk_and,
     Z3_mk_app,
     Z3_mk_array_sort,
@@ -80,6 +81,11 @@ float32_sort: SortRef = z3.Float32(ctx)
 float64_sort: SortRef = z3.Float64(ctx)
 _int_sort_ast = int_sort.ast
 
+# Python refuses decimal conversions beyond a configurable digit count
+# (no smaller than 640); convert at most this many digits at a time:
+_MAX_DIRECT_DECIMAL_DIGITS = 600
+_MAX_DIRECT_DECIMAL = 10**_MAX_DIRECT_DECIMAL_DIGITS
+
 
 def array_sort(domain: SortRef, codomain: SortRef) -> SortRef:
     return _to_sort_ref(Z3_mk_array_sort(ctx_ref, domain.ast, codomain.ast), ctx)
@@ -121,11 +127,40 @@ def bool_val(value: bool) -> BoolRef:
     return true if value else false
 
 
+def _decimal_string(magnitude: int) -> str:
+    if magnitude < _MAX_DIRECT_DECIMAL:
+        return magnitude.__str__()
+    low_digits = magnitude.bit_length() * 3 // 20
+    high, low = divmod(magnitude, 10**low_digits)
+    return _decimal_string(high) + _decimal_string(low).zfill(low_digits)
+
+
+def _decimal_magnitude(digits: str) -> int:
+    if len(digits) <= _MAX_DIRECT_DECIMAL_DIGITS:
+        return int(digits)
+    low_digits = len(digits) // 2
+    high, low = digits[:-low_digits], digits[-low_digits:]
+    return _decimal_magnitude(high) * 10**low_digits + _decimal_magnitude(low)
+
+
 def int_val(value: int) -> IntNumRef:
     # __index__ produces a plain int for int subtypes (e.g. enums)
-    return IntNumRef(
-        Z3_mk_numeral(ctx_ref, value.__index__().__str__(), _int_sort_ast), ctx
-    )
+    value = value.__index__()
+    try:
+        numeral = value.__str__()
+    except ValueError:
+        numeral = ("-" if value < 0 else "") + _decimal_string(abs(value))
+    return IntNumRef(Z3_mk_numeral(ctx_ref, numeral, _int_sort_ast), ctx)
+
+
+def numeral_to_int(numeral: IntNumRef) -> int:
+    digits = Z3_get_numeral_string(ctx_ref, numeral.as_ast())
+    try:
+        return int(digits)
+    except ValueError:
+        if digits.startswith("-"):
+            return -_decimal_magnitude(digits[1:])
+        return _decimal_magnitude(digits)
 
 
 def real_val(value: object) -> ExprRef:

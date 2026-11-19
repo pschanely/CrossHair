@@ -41,3 +41,16 @@ def test_declare_datatype():
     assert maybe.num_constructors() == 2
     some = smt.apply(maybe.some, smt.int_val(3))
     assert smt.apply(maybe.val, some).sort() == smt.int_sort
+
+
+@pytest.mark.parametrize(
+    "value,digits",
+    [(v, str(v)) for v in (10**700 + 123, -(10**700 + 123), 7 * 10**2000 - 1)],
+    ids=["positive", "negative", "deep"],
+)
+def test_int_numerals_beyond_digit_limit(small_int_str_digit_limit, value, digits):
+    with pytest.raises(ValueError):
+        str(value)
+    literal = smt.int_val(value)
+    assert literal.as_string() == digits
+    assert smt.numeral_to_int(literal) == value
