@@ -6,7 +6,9 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Faster solving for integer true division (``int / int``) under the
+   IEEE float representation. The overflow check is now a linear integer
+   comparison instead of a float conversion.
 
 
 Version 0.0.114

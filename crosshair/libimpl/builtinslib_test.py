@@ -533,6 +533,10 @@ def test_ieee_huge_int_pow_raises_overflow(space):
     "numerator, denominator",
     [
         (1 << 1100, 3),
+        (_INT_TO_FLOAT_OVERFLOW_BOUNDARY * 3, 3),
+        (_INT_TO_FLOAT_OVERFLOW_BOUNDARY * 3 - 1, 3),
+        (_INT_TO_FLOAT_OVERFLOW_BOUNDARY * 3, -3),
+        (-_INT_TO_FLOAT_OVERFLOW_BOUNDARY * 3 + 1, -3),
         (3, 1 << 1100),
         (-3, 1 << 1100),
         (1 << 1100, 0),

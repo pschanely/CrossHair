@@ -20,6 +20,7 @@ class EarliestPossibleTime:
 
 # Imprecision at high values becomes a sort of artificial problem
 _UNREALISTICALLY_LARGE_TIME_FLOAT = float(60 * 60 * 24 * 365 * 100_000)
+_UNREALISTICALLY_LARGE_TIME_NS = 60 * 60 * 24 * 365 * 100_000 * 1_000_000_000
 
 
 def _gte_last(kind: Literal["monotonic", "process_time"], value: Any) -> bool:
@@ -28,6 +29,12 @@ def _gte_last(kind: Literal["monotonic", "process_time"], value: Any) -> bool:
         threshold = getattr(earliest_times, kind)
         setattr(earliest_times, kind, value)
     return all([threshold <= value, value < _UNREALISTICALLY_LARGE_TIME_FLOAT])
+
+
+def _gte_last_ns(kind: Literal["monotonic", "process_time"], value: int) -> bool:
+    if not (0 <= value < _UNREALISTICALLY_LARGE_TIME_NS):
+        return False
+    return _gte_last(kind, value / 1_000_000_000)
 
 
 def _sleep(value: float) -> None:
@@ -65,7 +72,7 @@ def make_registrations():
     )
     register_contract(
         real_time.monotonic_ns,
-        post=lambda __return__: _gte_last("monotonic", __return__ / 1_000_000_000),
+        post=lambda __return__: _gte_last_ns("monotonic", __return__),
         sig=Signature(parameters=[], return_annotation=int),
     )
     register_contract(
@@ -77,7 +84,7 @@ def make_registrations():
     )
     register_contract(
         real_time.process_time_ns,
-        post=lambda __return__: _gte_last("process_time", __return__ / 1_000_000_000),
+        post=lambda __return__: _gte_last_ns("process_time", __return__),
         sig=Signature(parameters=[], return_annotation=int),
     )
     register_patch(real_time.sleep, _sleep)
