@@ -4440,6 +4440,11 @@ def _bytes_data_prop(s):
         return bytes(tracing_iter(s.inner))
 
 
+def _bytearray_data_prop(s):
+    with NoTracing():
+        return bytearray(tracing_iter(s.inner))
+
+
 class SymbolicBytes(BytesLike):
     def __init__(self, inner):
         with NoTracing():
@@ -4606,7 +4611,7 @@ class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
         super().__init__(byte_seq)
 
     __hash__ = None  # type: ignore
-    data = property(_bytes_data_prop)
+    data = property(_bytearray_data_prop)
 
     @property
     def _ch_codepoints(self):
