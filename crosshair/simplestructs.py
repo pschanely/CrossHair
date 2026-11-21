@@ -3,7 +3,6 @@ import copy
 import itertools
 import numbers
 import operator
-import sys
 from abc import abstractmethod
 from typing import (
     Any,
@@ -112,16 +111,14 @@ class MapBase(collections.abc.MutableMapping):
 
     __ror__ = __or__
 
-    if sys.version_info >= (3, 13):
+    def values(self):
+        return dict_values(self)
 
-        def values(self):
-            return dict_values(self)
+    def keys(self):
+        return dict_keys(self)
 
-        def keys(self):
-            return dict_keys(self)
-
-        def items(self):
-            return dict_items(self)
+    def items(self):
+        return dict_items(self)
 
 
 _MISSING = object()
