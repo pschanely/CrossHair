@@ -6,7 +6,12 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Fixed symbolic ``bytearray`` methods (``split``, ``join``, ``capitalize``,
+   ``center``, ``title``, and others) returning ``bytes`` instead of
+   ``bytearray``, and symbolic dict views returning the bare
+   ``collections.abc`` view types instead of ``dict_keys`` / ``dict_items`` /
+   ``dict_values``.
+   (`see #518 <https://github.com/pschanely/CrossHair/issues/518>`__)
 
 
 Version 0.0.114

@@ -1617,6 +1617,37 @@ def test_bytes_transforms_match_cpython(space):
             assert realize(sym.strip(b"ab")) == raw.strip(b"ab")
 
 
+def test_symbolic_bytearray_methods_return_bytearray(space):
+    # Regression: bytearray methods that delegate to AbcString used to return
+    # bytes (SymbolicByteArray.data realized to bytes); CPython returns
+    # bytearray for all of them.
+    raw = bytearray(b"Ab\tCd\nEf")
+    ba = proxy_for_type(bytearray, "ba")
+    with ResumedTracing():
+        space.add(len(ba) == len(raw))
+        for i, byte in enumerate(raw):
+            space.add(ba[i] == byte)
+        for result, expected in (
+            (ba.capitalize(), raw.capitalize()),
+            (ba.center(12), raw.center(12)),
+            (ba.expandtabs(), raw.expandtabs()),
+            (ba.join([b"a", b"b"]), raw.join([b"a", b"b"])),
+            (ba.ljust(12), raw.ljust(12)),
+            (ba.rjust(12), raw.rjust(12)),
+            (ba.title(), raw.title()),
+            (ba.zfill(12), raw.zfill(12)),
+        ):
+            assert type(result) is bytearray
+            assert realize(result) == expected
+        for result, expected in (
+            (ba.split(), raw.split()),
+            (ba.rsplit(), raw.rsplit()),
+            (ba.splitlines(), raw.splitlines()),
+        ):
+            assert all(type(part) is bytearray for part in result)
+            assert realize(result) == expected
+
+
 def test_bytes_strip_rejects_int_chars(space):
     # Unlike the search family, strip does NOT accept an int -- chars must be a
     # bytes-like object (matching CPython bytes.strip).
@@ -3394,6 +3425,22 @@ def test_dict_items_ok(space: StateSpace) -> None:
         a[10] = "ten"
         items = a.items()
         assert realize(items.__contains__((10, "ten")))
+
+
+def test_symbolic_dict_views_return_dict_view_types(space: StateSpace) -> None:
+    # Regression: symbolic dicts used to return the bare ABC KeysView /
+    # ItemsView / ValuesView from collections.abc.Mapping instead of
+    # dict_keys / dict_items / dict_values.
+    a = proxy_for_type(Dict[int, str], "a")
+    with ResumedTracing():
+        space.add(len(a) == 1)
+        a[10] = "ten"
+        assert type(a.keys()).__name__ == "dict_keys"
+        assert type(a.items()).__name__ == "dict_items"
+        assert type(a.values()).__name__ == "dict_values"
+        assert realize(list(a.keys())) == [10]
+        assert realize(list(a.items())) == [(10, "ten")]
+        assert realize(list(a.values())) == ["ten"]
 
 
 def test_dict_setdefault_float_int_comparison(space: StateSpace) -> None:
