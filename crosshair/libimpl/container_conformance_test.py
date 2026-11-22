@@ -236,7 +236,7 @@ _CONTAINER_OWNERS = (
 )
 
 # Concrete result types worth probing: containers, including dict views.
-_CONTAINER_RESULT_TYPES = (
+_CONTAINER_RESULT_TYPES: Tuple[type, ...] = (
     list,
     tuple,
     dict,
