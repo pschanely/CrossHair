@@ -4685,6 +4685,24 @@ class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
     def decode(self, encoding="utf-8", errors="strict"):
         return codecs.decode(self, encoding, errors=errors)
 
+    def take_bytes(self, n=None, /):
+        size = len(self.inner)
+        if n is None:
+            n = size
+        else:
+            try:
+                n = ops.index(n)
+            except TypeError:
+                raise TypeError("n must be an integer or None")
+            if n < 0:
+                n += size
+            if n < 0 or n > size:
+                raise IndexError(f"can't take {n} bytes outside size {size}")
+        taken = self.inner[:n]
+        del self[:n]
+        with NoTracing():
+            return SymbolicBytes(taken)
+
     @classmethod
     def fromhex(cls, hexstr):
         return SymbolicByteArray(bytes.fromhex(hexstr))

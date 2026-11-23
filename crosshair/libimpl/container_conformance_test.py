@@ -243,7 +243,6 @@ KNOWN_FAILURES = {
     "frozenset.copy": "symbolic frozenset iteration order diverges from concrete (repr diverges)",
     # Large repeats blow the symbolic recursion budget.
     "list.__mul__": "symbolic list * large int raises RecursionError (timing-dependent)",
-    "bytearray.take_bytes": "SymbolicByteArray does not implement take_bytes (Python 3.15+)",
 }
 
 

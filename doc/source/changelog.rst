@@ -11,6 +11,7 @@ Next Version
    ``bytearray``. Symbolic dict views on Python < 3.13 are now
    ``dict_keys`` / ``dict_items`` / ``dict_values`` (``collections.abc`` view
    subclasses) and realize to real dict views.
+ * Added symbolic ``bytearray.take_bytes`` (Python 3.15+).
    (`see #518 <https://github.com/pschanely/CrossHair/issues/518>`__)
 
 
