@@ -15,6 +15,7 @@ Two sources of cases live here:
 
 import copy
 from array import array
+from collections.abc import ItemsView, KeysView, ValuesView
 from typing import Dict, FrozenSet, List, Set, Tuple
 
 import pytest
@@ -55,8 +56,24 @@ def _same_contents(value):
     return comparands
 
 
+def _is_unordered(value):
+    return isinstance(value, (set, frozenset, dict, KeysView, ValuesView, ItemsView))
+
+
+def _iteration_outcome(value, iterate):
+    def run():
+        items = list(iterate(value))
+        return sorted(map(repr, items)) if _is_unordered(value) else items
+
+    return _outcome(run)
+
+
 def _probe(value, comparands):
+    sample_items = comparands["list"][:1]
     outcomes = {
+        "iter": _iteration_outcome(value, iter),
+        "reversed": _iteration_outcome(value, reversed),
+        "contains item": _outcome(lambda: [x in value for x in sample_items]),
         "type": _outcome(lambda: _type_name(value)),
         "repr": _outcome(lambda: repr(value)),
         "len": _outcome(lambda: len(value)),
@@ -236,13 +253,19 @@ _CONTAINER_RESULT_TYPES: Tuple[type, ...] = (
 # Ops whose unrealized result is known to diverge from the concrete one. These
 # are non-strict xfails.
 KNOWN_FAILURES = {
-    "dict.keys": "symbolic dict iteration order is solver order, not insertion order (repr diverges)",
-    "dict.items": "symbolic dict iteration order is solver order, not insertion order (repr diverges)",
-    "dict.copy": "symbolic dict iteration order is solver order, not insertion order (repr diverges)",
-    "dict.__or__": "symbolic dict iteration order is solver order, not insertion order (repr diverges)",
-    "frozenset.copy": "symbolic frozenset iteration order diverges from concrete (repr diverges)",
     # Large repeats blow the symbolic recursion budget.
     "list.__mul__": "symbolic list * large int raises RecursionError (timing-dependent)",
+}
+
+
+# Ops whose symbolic result lists elements in solver order, so only the repr
+# probe is skipped for them.
+REPR_ORDER_DIVERGENT = {
+    "dict.keys",
+    "dict.items",
+    "dict.copy",
+    "dict.__or__",
+    "frozenset.copy",
 }
 
 
@@ -324,6 +347,7 @@ def _check_catalog_op(key, op):
             f"  {probe}: symbolic {symbolic_outcomes[probe]!r}, concrete {expected!r}"
             for probe, expected in concrete_outcomes.items()
             if symbolic_outcomes[probe] != expected
+            and not (probe == "repr" and op.seedkey in REPR_ORDER_DIVERGENT)
         ]
         assert not mismatches, (
             f"{key} diverges on `{call.expr}` with {vals!r}:\n" + "\n".join(mismatches)
