@@ -248,19 +248,13 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         return self._reversed()
 
     def _reversed(self):
-        deleted = []
         mutations = self._mutations
         for k in reversed(mutations):
-            if mutations[k] is _DELETED:
-                deleted.append(k)
-                continue
-            else:
+            if mutations[k] is not _DELETED:
                 yield k
-        inner = self._inner
-        for k in reversed(inner):
-            if k in deleted:
-                continue
-            else:
+        suppress = list(mutations.keys())  # check against list to avoid hash
+        for k in reversed(self._inner):
+            if k not in suppress:
                 yield k
 
     def __iter__(self):
