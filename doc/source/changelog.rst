@@ -12,6 +12,8 @@ Next Version
    ``dict_keys`` / ``dict_items`` / ``dict_values`` (``collections.abc`` view
    subclasses) and realize to real dict views.
  * Added symbolic ``bytearray.take_bytes`` (Python 3.15+).
+ * Fixed ``reversed()`` on a mutated symbolic dict (for example, the result of
+   ``|``) yielding overwritten keys twice.
    (`see #518 <https://github.com/pschanely/CrossHair/issues/518>`__)
 
 
