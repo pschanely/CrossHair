@@ -19,6 +19,8 @@ from typing import Dict, FrozenSet, List, Set, Tuple
 
 import pytest
 
+pytest.importorskip("hypothesis")  # imported by crosshair.inputgen
+
 import crosshair.core_and_libs  # noqa: F401
 from crosshair.behavior_compare import SkipReason, run_symbolic_pinned
 from crosshair.core import deep_realize, proxy_for_type
