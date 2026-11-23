@@ -2,32 +2,24 @@
 Symbolic containers must behave like the builtin types they model.
 
 Each case runs an operation on a symbolic input and compares how the *unrealized*
-result behaves against the same operation's result on the concrete input. Probes
-focus on type-sensitive behaviors, which are easy to get wrong when a result is
-represented by a lazy, general-purpose structure.
+result behaves against the same operation's result on the concrete input.
 
 Two sources of cases live here:
 
-* ``CASES`` -- hand-written operations, each pinned to symbolic inputs of size
-  0, 1 and 2. The size sweep matters: empty and single-item containers often
-  behave differently from larger ones, and catalog inputs do not reliably
-  include them.
+* ``CASES`` -- hand-written operations, each run on symbolic inputs of size 0, 1
+  and 2.
 * The operation catalog (``crosshair.inputgen``) -- every catalogued method on
-  a container type, driven with catalog inputs. Coverage grows with the catalog
-  instead of by hand (issue #518, part 1). An op only contributes when a
-  catalog input's concrete result is a container; other inputs are skipped.
+  a container type, driven with catalog inputs. Only inputs whose concrete
+  result is a container are checked.
 """
 
 import copy
 from array import array
-from collections import deque
 from typing import Dict, FrozenSet, List, Set, Tuple
 
 import pytest
 
-pytest.importorskip("hypothesis")  # imported by crosshair.inputgen
-
-import crosshair.core_and_libs  # noqa: F401  -- ensure patches/plugins load
+import crosshair.core_and_libs  # noqa: F401
 from crosshair.behavior_compare import SkipReason, run_symbolic_pinned
 from crosshair.core import deep_realize, proxy_for_type
 from crosshair.inputgen import catalog, inputs_for
@@ -201,27 +193,15 @@ def test_result_behaves_like_modeled_type(space, input_type, operation, size):
     assert not mismatches, "\n" + "\n".join(mismatches)
 
 
-# ---------------------------------------------------------------------------
-# Catalog-driven cases (issue #518, part 1): the probe battery above, run on
-# every catalogued method on a container type, with catalog inputs.  The
-# symbolic run is pinned to each concrete input, and the probe runs INSIDE the
-# pinned run (as the applier), so it observes the unrealized result in the
-# same StateSpace that produced it -- probing the result afterwards, under a
-# different StateSpace, does not see the pinned values.
-# ---------------------------------------------------------------------------
+# Catalog-driven cases: the probe battery above, run inside a symbolic run that
+# is pinned to each catalog input.
 
-# Catalog inputs checked per operation. Small for CI: the pinned run dominates
-# the cost, and each input exercises the same lazy structures.
 INPUTS_PER_OP = 2
 
-# Per-input pin budget, mirroring the differential fuzz test: an input that pins
-# at all does so on the first iteration in well under a second.
 PIN_ITERS = 12
 PIN_TIMEOUT = 4.0
 
-# Receiver types whose methods this test covers: the builtin container types,
-# plus array and deque. Methods on other types cannot return a symbolic
-# container result through the lazy structures this test targets.
+# Receiver types whose methods the catalog tests cover.
 _CONTAINER_OWNERS = (
     "list",
     "tuple",
@@ -251,22 +231,13 @@ _CONTAINER_RESULT_TYPES: Tuple[type, ...] = (
     type({}.items()),
 )
 
-# Ops whose unrealized result diverges from the concrete one on type-sensitive
-# probes -- real model gaps surfaced by this test (distinct from the
-# differential's divergences: the differential compares REALIZED results, so it
-# cannot see a wrong unrealized structure). xfail'd NON-strict: which gaps
-# reproduce varies by Python version, so a strict xfail would flake; run
-# `pytest -rX crosshair/libimpl/container_conformance_test.py` to spot fixes
-# (XPASS) and prune this list.
+# Ops whose unrealized result is known to diverge from the concrete one. These
+# are non-strict xfails.
 KNOWN_FAILURES = {
-    # Symbolic dicts iterate in solver order, not insertion order, so the
-    # unrealized result's repr diverges from the concrete one. (The view
-    # *type* now matches: MapBase returns CrossHair's dict_keys/dict_items.)
     "dict.keys": "symbolic dict iteration order is solver order, not insertion order (repr diverges)",
     "dict.items": "symbolic dict iteration order is solver order, not insertion order (repr diverges)",
     "dict.copy": "symbolic dict iteration order is solver order, not insertion order (repr diverges)",
     "dict.__or__": "symbolic dict iteration order is solver order, not insertion order (repr diverges)",
-    # Symbolic sets iterate in solver order, not CPython's hash-table order.
     "frozenset.copy": "symbolic frozenset iteration order diverges from concrete (repr diverges)",
     # Large repeats blow the symbolic recursion budget.
     "list.__mul__": "symbolic list * large int raises RecursionError (timing-dependent)",
@@ -274,12 +245,8 @@ KNOWN_FAILURES = {
 
 
 def _op_marks(op):
-    """Marks for one catalogued op. Skip what can't/shouldn't be probed -- out
-    of scope (OS handle), a probe hazard (blocks/crashes), a side effect (real
-    I/O), or an op whose output isn't a comparable value function -- and xfail
-    known model gaps. The skip reasons come straight off the catalog's
-    classification (crosshair.inputgen), the same fields the differential fuzz
-    test reads."""
+    """Skip marks for ops the catalog classifies as unprobeable; xfail marks for
+    known failures."""
     marks = []
     if op.out_of_scope:
         marks.append(pytest.mark.skip(reason=f"out of scope: {op.out_of_scope}"))
@@ -298,12 +265,7 @@ def _op_marks(op):
     return marks
 
 
-# Enumerate the ONE canonical surface (crosshair.inputgen.catalog) -- the same
-# set the differential fuzz test draws from, restricted to methods on container
-# types, so the test and the catalog can't drift. Static classification only
-# (probe=False): fast, and complete here since this pure surface reaches for no
-# live-probed side effects. Keyed by the rendered key; the test looks the
-# Operation back up, so params stay picklable (xdist-safe).
+# Keyed by the rendered key so that test params stay picklable.
 _CATALOG = {
     op.key: op
     for op in catalog(probe=False)
@@ -315,11 +277,7 @@ _CATALOG = {
 
 
 def _catalog_params():
-    # sorted() so collection order is deterministic across processes. catalog()'s
-    # yield order isn't stable process-to-process (it iterates object-keyed
-    # collections whose order depends on address/ASLR), and pytest-xdist aborts
-    # the run if its workers collect tests in different orders. Parametrization
-    # order has no bearing on outcomes (each op is checked independently).
+    # Sorted: pytest-xdist requires a deterministic collection order.
     for key in sorted(_CATALOG):
         yield pytest.param(key, id=key, marks=_op_marks(_CATALOG[key]))
 
@@ -327,13 +285,11 @@ def _catalog_params():
 def _check_catalog_op(key, op):
     """Probe the unrealized symbolic result of one catalogued op against the
     concrete result, on each catalog input whose concrete result is a container.
-    Returns after the first mismatch is found (pytest reports it); inputs that
-    raise, don't pin, or don't return a container are skipped -- the
-    differential fuzz test owns exception equality, and only container results
-    have the lazy structures this test targets."""
+    Inputs that raise concretely or don't return a container are skipped."""
     call = op.call
     inputs = inputs_for(call, k=INPUTS_PER_OP, seedkey=op.seedkey)
     checked = 0
+    symbolic_errors = []
     for vals in inputs:
         with NoTracing():
             try:
@@ -358,6 +314,7 @@ def _check_catalog_op(key, op):
         if isinstance(res, SkipReason):
             continue
         if res.exc is not None:
+            symbolic_errors.append(f"{vals!r}: {res.exc!r}")
             continue
         checked += 1
         symbolic_outcomes = res.ret
@@ -368,6 +325,11 @@ def _check_catalog_op(key, op):
         ]
         assert not mismatches, (
             f"{key} diverges on `{call.expr}` with {vals!r}:\n" + "\n".join(mismatches)
+        )
+    if checked == 0 and symbolic_errors:
+        pytest.fail(
+            f"{key}: symbolic execution raised where concrete execution "
+            "returned a container:\n" + "\n".join(symbolic_errors)
         )
     if checked == 0:
         pytest.skip(f"no container-returning inputs for {key}")

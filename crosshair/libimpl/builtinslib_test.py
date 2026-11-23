@@ -75,6 +75,7 @@ from crosshair.libimpl.builtinslib import (
     smt_not,
 )
 from crosshair.options import AnalysisOptionSet
+from crosshair.simplestructs import dict_items, dict_keys, dict_values
 from crosshair.statespace import (
     CANNOT_CONFIRM,
     CONFIRMED,
@@ -1618,9 +1619,6 @@ def test_bytes_transforms_match_cpython(space):
 
 
 def test_symbolic_bytearray_methods_return_bytearray(space):
-    # Regression: bytearray methods that delegate to AbcString used to return
-    # bytes (SymbolicByteArray.data realized to bytes); CPython returns
-    # bytearray for all of them.
     raw = bytearray(b"Ab\tCd\nEf")
     ba = proxy_for_type(bytearray, "ba")
     with ResumedTracing():
@@ -1636,6 +1634,10 @@ def test_symbolic_bytearray_methods_return_bytearray(space):
             (ba.rjust(12), raw.rjust(12)),
             (ba.title(), raw.title()),
             (ba.zfill(12), raw.zfill(12)),
+            (ba.strip(b"Ab"), raw.strip(b"Ab")),
+            (ba.lstrip(b"Ab"), raw.lstrip(b"Ab")),
+            (ba.rstrip(b"Ef"), raw.rstrip(b"Ef")),
+            (ba.replace(b"C", b"c"), raw.replace(b"C", b"c")),
         ):
             assert type(result) is bytearray
             assert realize(result) == expected
@@ -1643,6 +1645,12 @@ def test_symbolic_bytearray_methods_return_bytearray(space):
             (ba.split(), raw.split()),
             (ba.rsplit(), raw.rsplit()),
             (ba.splitlines(), raw.splitlines()),
+        ):
+            assert all(type(part) is bytearray for part in result)
+            assert realize(result) == expected
+        for result, expected in (
+            (ba.partition(b"C"), raw.partition(b"C")),
+            (ba.rpartition(b"C"), raw.rpartition(b"C")),
         ):
             assert all(type(part) is bytearray for part in result)
             assert realize(result) == expected
@@ -3428,19 +3436,26 @@ def test_dict_items_ok(space: StateSpace) -> None:
 
 
 def test_symbolic_dict_views_return_dict_view_types(space: StateSpace) -> None:
-    # Regression: symbolic dicts used to return the bare ABC KeysView /
-    # ItemsView / ValuesView from collections.abc.Mapping instead of
-    # dict_keys / dict_items / dict_values.
     a = proxy_for_type(Dict[int, str], "a")
     with ResumedTracing():
         space.add(len(a) == 1)
         a[10] = "ten"
-        assert type(a.keys()).__name__ == "dict_keys"
-        assert type(a.items()).__name__ == "dict_items"
-        assert type(a.values()).__name__ == "dict_values"
-        assert realize(list(a.keys())) == [10]
-        assert realize(list(a.items())) == [(10, "ten")]
-        assert realize(list(a.values())) == ["ten"]
+        keys, items, values = a.keys(), a.items(), a.values()
+        assert type(keys) is dict_keys
+        assert type(items) is dict_items
+        assert type(values) is dict_values
+        assert realize(list(keys)) == [10]
+        assert realize(list(items)) == [(10, "ten")]
+        assert realize(list(values)) == ["ten"]
+        assert realize(keys & {10, 11}) == {10}
+        assert realize(keys.isdisjoint({11}))
+        assert realize(items == {(10, "ten")})
+        assert realize(list(reversed(keys))) == [10]
+        assert realize(10 in keys)
+        assert len(items) == 1
+        assert type(deep_realize(keys)) is type({}.keys())
+        assert type(deep_realize(items)) is type({}.items())
+        assert type(deep_realize(values)) is type({}.values())
 
 
 def test_dict_setdefault_float_int_comparison(space: StateSpace) -> None:

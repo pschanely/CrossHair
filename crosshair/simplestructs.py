@@ -31,10 +31,12 @@ from crosshair.util import (
 )
 
 
-# View types were moved to C in 3.13:
 class dict_values(collections.abc.ValuesView):
     def __ch_deep_realize__(self, memo):
         return deep_realize(self._mapping).values()
+
+    def __reversed__(self):
+        return reversed(list(self._mapping.values()))
 
     def __repr__(self):
         return f"{self.__class__.__name__}({list(self._mapping.values())!r})"
@@ -44,6 +46,9 @@ class dict_keys(collections.abc.KeysView):
     def __ch_deep_realize__(self, memo):
         return deep_realize(self._mapping).keys()
 
+    def __reversed__(self):
+        return reversed(list(self._mapping.keys()))
+
     def __repr__(self):
         return f"{self.__class__.__name__}({list(self._mapping.keys())!r})"
 
@@ -51,6 +56,9 @@ class dict_keys(collections.abc.KeysView):
 class dict_items(collections.abc.ItemsView):
     def __ch_deep_realize__(self, memo):
         return deep_realize(self._mapping).items()
+
+    def __reversed__(self):
+        return reversed(list(self._mapping.items()))
 
     def __repr__(self):
         return f"{self.__class__.__name__}({list(self._mapping.items())!r})"

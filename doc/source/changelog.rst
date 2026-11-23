@@ -8,9 +8,9 @@ Next Version
 
  * Fixed symbolic ``bytearray`` methods (``split``, ``join``, ``capitalize``,
    ``center``, ``title``, and others) returning ``bytes`` instead of
-   ``bytearray``, and symbolic dict views returning the bare
-   ``collections.abc`` view types instead of ``dict_keys`` / ``dict_items`` /
-   ``dict_values``.
+   ``bytearray``. Symbolic dict views on Python < 3.13 are now
+   ``dict_keys`` / ``dict_items`` / ``dict_values`` (``collections.abc`` view
+   subclasses) and realize to real dict views.
    (`see #518 <https://github.com/pschanely/CrossHair/issues/518>`__)
 
 
