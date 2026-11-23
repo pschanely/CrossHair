@@ -15,7 +15,6 @@ Two sources of cases live here:
 
 import copy
 from array import array
-from collections.abc import ItemsView, KeysView, ValuesView
 from typing import Dict, FrozenSet, List, Set, Tuple
 
 import pytest
@@ -57,7 +56,7 @@ def _same_contents(value):
 
 
 def _is_unordered(value):
-    return isinstance(value, (set, frozenset, dict, KeysView, ValuesView, ItemsView))
+    return isinstance(value, (set, frozenset))
 
 
 def _iteration_outcome(value, iterate):
@@ -258,14 +257,16 @@ KNOWN_FAILURES = {
 }
 
 
-# Ops whose symbolic result lists elements in solver order, so only the repr
-# probe is skipped for them.
-REPR_ORDER_DIVERGENT = {
-    "dict.keys",
-    "dict.items",
-    "dict.copy",
-    "dict.__or__",
-    "frozenset.copy",
+_SOLVER_ORDER_PROBES = frozenset({"iter", "reversed", "repr"})
+
+# Probes on which an op's symbolic result is known to diverge. A divergence on
+# any other probe fails the test; a divergence only on these xfails it.
+KNOWN_PROBE_DIVERGENCES = {
+    "dict.keys": _SOLVER_ORDER_PROBES,
+    "dict.items": _SOLVER_ORDER_PROBES,
+    "dict.copy": _SOLVER_ORDER_PROBES,
+    "dict.__or__": _SOLVER_ORDER_PROBES,
+    "frozenset.copy": frozenset({"repr"}),
 }
 
 
@@ -315,6 +316,7 @@ def _check_catalog_op(key, op):
     inputs = inputs_for(call, k=INPUTS_PER_OP, seedkey=op.seedkey)
     checked = 0
     symbolic_errors = []
+    known_divergences = []
     for vals in inputs:
         with NoTracing():
             try:
@@ -343,15 +345,24 @@ def _check_catalog_op(key, op):
             continue
         checked += 1
         symbolic_outcomes = res.ret
-        mismatches = [
-            f"  {probe}: symbolic {symbolic_outcomes[probe]!r}, concrete {expected!r}"
+        known = KNOWN_PROBE_DIVERGENCES.get(op.seedkey, frozenset())
+        diverging = [
+            probe
             for probe, expected in concrete_outcomes.items()
             if symbolic_outcomes[probe] != expected
-            and not (probe == "repr" and op.seedkey in REPR_ORDER_DIVERGENT)
+        ]
+        known_divergences.extend(p for p in diverging if p in known)
+        mismatches = [
+            f"  {probe}: symbolic {symbolic_outcomes[probe]!r}, "
+            f"concrete {concrete_outcomes[probe]!r}"
+            for probe in diverging
+            if probe not in known
         ]
         assert not mismatches, (
             f"{key} diverges on `{call.expr}` with {vals!r}:\n" + "\n".join(mismatches)
         )
+    if known_divergences:
+        pytest.xfail(f"known divergence on: {sorted(set(known_divergences))}")
     if checked == 0 and symbolic_errors:
         pytest.fail(
             f"{key}: symbolic execution raised where concrete execution "
