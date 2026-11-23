@@ -1656,6 +1656,29 @@ def test_symbolic_bytearray_methods_return_bytearray(space):
             assert realize(result) == expected
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 15), reason="bytearray.take_bytes requires 3.15+"
+)
+@pytest.mark.parametrize("n", [None, 0, 2, 4, -1, -4, 5, -5, True, 1.5, "a"])
+def test_symbolic_bytearray_take_bytes(space, n):
+    raw = bytearray(b"abcd")
+    ba = proxy_for_type(bytearray, "ba")
+    with ResumedTracing():
+        space.add(len(ba) == len(raw))
+        for i, byte in enumerate(raw):
+            space.add(ba[i] == byte)
+        try:
+            taken = ba.take_bytes(n)
+        except (IndexError, TypeError) as exc:
+            with pytest.raises(type(exc)):
+                raw.take_bytes(n)
+            assert realize(ba) == b"abcd"
+        else:
+            assert type(taken) is bytes
+            assert realize(taken) == raw.take_bytes(n)
+            assert realize(ba) == raw
+
+
 def test_bytes_strip_rejects_int_chars(space):
     # Unlike the search family, strip does NOT accept an int -- chars must be a
     # bytes-like object (matching CPython bytes.strip).
