@@ -2,9 +2,15 @@
 Symbolic containers must behave like the builtin types they model.
 
 Each case runs an operation on a symbolic input and compares how the *unrealized*
-result behaves against the same operation's result on the concrete input. Probes
-focus on type-sensitive behaviors, which are easy to get wrong when a result is
-represented by a lazy, general-purpose structure.
+result behaves against the same operation's result on the concrete input.
+
+Two sources of cases live here:
+
+* ``CASES`` -- hand-written operations, each run on symbolic inputs of size 0, 1
+  and 2.
+* The operation catalog (``crosshair.inputgen``) -- every catalogued method on
+  a container type, driven with catalog inputs. Only inputs whose concrete
+  result is a container are checked.
 """
 
 import copy
@@ -13,8 +19,13 @@ from typing import Dict, FrozenSet, List, Set, Tuple
 
 import pytest
 
+pytest.importorskip("hypothesis")  # imported by crosshair.inputgen
+
+import crosshair.core_and_libs  # noqa: F401
+from crosshair.behavior_compare import SkipReason, run_symbolic_pinned
 from crosshair.core import deep_realize, proxy_for_type
-from crosshair.tracers import ResumedTracing
+from crosshair.inputgen import catalog, inputs_for
+from crosshair.tracers import NoTracing, ResumedTracing
 
 
 def _outcome(thunk):
@@ -44,8 +55,24 @@ def _same_contents(value):
     return comparands
 
 
+def _is_unordered(value):
+    return isinstance(value, (set, frozenset))
+
+
+def _iteration_outcome(value, iterate):
+    def run():
+        items = list(iterate(value))
+        return sorted(map(repr, items)) if _is_unordered(value) else items
+
+    return _outcome(run)
+
+
 def _probe(value, comparands):
+    sample_items = comparands["list"][:1]
     outcomes = {
+        "iter": _iteration_outcome(value, iter),
+        "reversed": _iteration_outcome(value, reversed),
+        "contains item": _outcome(lambda: [x in value for x in sample_items]),
         "type": _outcome(lambda: _type_name(value)),
         "repr": _outcome(lambda: repr(value)),
         "len": _outcome(lambda: len(value)),
@@ -182,3 +209,170 @@ def test_result_behaves_like_modeled_type(space, input_type, operation, size):
         if symbolic_outcomes[probe] != expected
     ]
     assert not mismatches, "\n" + "\n".join(mismatches)
+
+
+# Catalog-driven cases: the probe battery above, run inside a symbolic run that
+# is pinned to each catalog input.
+
+INPUTS_PER_OP = 2
+
+PIN_ITERS = 12
+PIN_TIMEOUT = 4.0
+
+# Receiver types whose methods the catalog tests cover.
+_CONTAINER_OWNERS = (
+    "list",
+    "tuple",
+    "dict",
+    "set",
+    "frozenset",
+    "str",
+    "bytes",
+    "bytearray",
+    "array",
+    "deque",
+)
+
+# Concrete result types worth probing: containers, including dict views.
+_CONTAINER_RESULT_TYPES: Tuple[type, ...] = (
+    list,
+    tuple,
+    dict,
+    set,
+    frozenset,
+    str,
+    bytes,
+    bytearray,
+    array,
+    type({}.keys()),
+    type({}.values()),
+    type({}.items()),
+)
+
+# Ops whose unrealized result is known to diverge from the concrete one. These
+# are non-strict xfails.
+KNOWN_FAILURES = {
+    # Large repeats blow the symbolic recursion budget.
+    "list.__mul__": "symbolic list * large int raises RecursionError (timing-dependent)",
+}
+
+
+_SOLVER_ORDER_PROBES = frozenset({"iter", "reversed", "repr"})
+
+# Probes on which an op's symbolic result is known to diverge. A divergence on
+# any other probe fails the test; a divergence only on these xfails it.
+KNOWN_PROBE_DIVERGENCES = {
+    "dict.keys": _SOLVER_ORDER_PROBES,
+    "dict.items": _SOLVER_ORDER_PROBES,
+    "dict.copy": _SOLVER_ORDER_PROBES,
+    "dict.__or__": _SOLVER_ORDER_PROBES,
+    "frozenset.copy": frozenset({"repr"}),
+}
+
+
+def _op_marks(op):
+    """Skip marks for ops the catalog classifies as unprobeable; xfail marks for
+    known failures."""
+    marks = []
+    if op.out_of_scope:
+        marks.append(pytest.mark.skip(reason=f"out of scope: {op.out_of_scope}"))
+    elif op.no_inputs:
+        marks.append(pytest.mark.skip(reason=f"no inputs: {op.no_inputs}"))
+    elif op.probe_hazard:
+        marks.append(pytest.mark.skip(reason=f"probe hazard: {op.probe_hazard}"))
+    elif op.side_effect:
+        marks.append(pytest.mark.skip(reason=f"side effect: {op.side_effect}"))
+    elif op.not_value_function:
+        marks.append(
+            pytest.mark.skip(reason=f"not a value function: {op.not_value_function}")
+        )
+    elif op.seedkey in KNOWN_FAILURES:
+        marks.append(pytest.mark.xfail(reason=KNOWN_FAILURES[op.seedkey], strict=False))
+    return marks
+
+
+# Keyed by the rendered key so that test params stay picklable.
+_CATALOG = {
+    op.key: op
+    for op in catalog(probe=False)
+    if op.call is not None
+    and not op.no_inputs
+    and op.kind == "method"
+    and op.owner in _CONTAINER_OWNERS
+}
+
+
+def _catalog_params():
+    # Sorted: pytest-xdist requires a deterministic collection order.
+    for key in sorted(_CATALOG):
+        yield pytest.param(key, id=key, marks=_op_marks(_CATALOG[key]))
+
+
+def _check_catalog_op(key, op):
+    """Probe the unrealized symbolic result of one catalogued op against the
+    concrete result, on each catalog input whose concrete result is a container.
+    Inputs that raise concretely or don't return a container are skipped."""
+    call = op.call
+    inputs = inputs_for(call, k=INPUTS_PER_OP, seedkey=op.seedkey)
+    checked = 0
+    symbolic_errors = []
+    known_divergences = []
+    for vals in inputs:
+        with NoTracing():
+            try:
+                concrete_result = call.invoke(copy.deepcopy(list(vals)))
+            except Exception:
+                continue
+        if not isinstance(concrete_result, _CONTAINER_RESULT_TYPES):
+            continue
+        comparands = _same_contents(concrete_result)
+        concrete_outcomes = _probe(concrete_result, comparands)
+
+        def applier(*vs, _call=call, _comparands=comparands):
+            return _probe(_call.invoke(vs), _comparands)
+
+        res = run_symbolic_pinned(
+            applier,
+            call.arg_names,
+            vals,
+            max_pin_iters=PIN_ITERS,
+            pin_timeout=PIN_TIMEOUT,
+        )
+        if isinstance(res, SkipReason):
+            continue
+        if res.exc is not None:
+            symbolic_errors.append(f"{vals!r}: {res.exc!r}")
+            continue
+        checked += 1
+        symbolic_outcomes = res.ret
+        known = KNOWN_PROBE_DIVERGENCES.get(op.seedkey, frozenset())
+        diverging = [
+            probe
+            for probe, expected in concrete_outcomes.items()
+            if symbolic_outcomes[probe] != expected
+        ]
+        known_divergences.extend(p for p in diverging if p in known)
+        mismatches = [
+            f"  {probe}: symbolic {symbolic_outcomes[probe]!r}, "
+            f"concrete {concrete_outcomes[probe]!r}"
+            for probe in diverging
+            if probe not in known
+        ]
+        assert not mismatches, (
+            f"{key} diverges on `{call.expr}` with {vals!r}:\n" + "\n".join(mismatches)
+        )
+    if known_divergences:
+        pytest.xfail(f"known divergence on: {sorted(set(known_divergences))}")
+    if checked == 0 and symbolic_errors:
+        pytest.fail(
+            f"{key}: symbolic execution raised where concrete execution "
+            "returned a container:\n" + "\n".join(symbolic_errors)
+        )
+    if checked == 0:
+        pytest.skip(f"no container-returning inputs for {key}")
+
+
+@pytest.mark.parametrize("key", list(_catalog_params()))
+def test_catalog_result_behaves_like_modeled_type(key):
+    """Probe battery on one catalogued container operation's unrealized result."""
+    _check_catalog_op(key, _CATALOG[key])

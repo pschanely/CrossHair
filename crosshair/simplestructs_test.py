@@ -34,6 +34,17 @@ def test_ShellMutableMap() -> None:
     assert m == {3: 3, 4: None, 6: 6}
 
 
+def test_ShellMutableMap_reversed_is_reverse_of_iteration() -> None:
+    m = ShellMutableMap({1: "a", 2: "b", 3: "c", 4: "d"})
+    m[2] = "B"
+    m[5] = "e"
+    del m[3]
+    m[3] = "C"
+    del m[4]
+    assert list(reversed(m)) == list(reversed(list(m)))
+    assert list(reversed(m)) == [3, 5, 2, 1]
+
+
 def test_ShellMutableMap_popitem_ordering() -> None:
     assert {"c": "d", "a": "b"}.popitem() == ("a", "b")
     assert SimpleDict([("c", "d"), ("a", "b")]).popitem() == ("a", "b")

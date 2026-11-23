@@ -3,7 +3,6 @@ import copy
 import itertools
 import numbers
 import operator
-import sys
 from abc import abstractmethod
 from typing import (
     Any,
@@ -32,10 +31,12 @@ from crosshair.util import (
 )
 
 
-# View types were moved to C in 3.13:
 class dict_values(collections.abc.ValuesView):
     def __ch_deep_realize__(self, memo):
         return deep_realize(self._mapping).values()
+
+    def __reversed__(self):
+        return reversed(list(self._mapping.values()))
 
     def __repr__(self):
         return f"{self.__class__.__name__}({list(self._mapping.values())!r})"
@@ -45,6 +46,9 @@ class dict_keys(collections.abc.KeysView):
     def __ch_deep_realize__(self, memo):
         return deep_realize(self._mapping).keys()
 
+    def __reversed__(self):
+        return reversed(list(self._mapping.keys()))
+
     def __repr__(self):
         return f"{self.__class__.__name__}({list(self._mapping.keys())!r})"
 
@@ -52,6 +56,9 @@ class dict_keys(collections.abc.KeysView):
 class dict_items(collections.abc.ItemsView):
     def __ch_deep_realize__(self, memo):
         return deep_realize(self._mapping).items()
+
+    def __reversed__(self):
+        return reversed(list(self._mapping.items()))
 
     def __repr__(self):
         return f"{self.__class__.__name__}({list(self._mapping.items())!r})"
@@ -112,16 +119,14 @@ class MapBase(collections.abc.MutableMapping):
 
     __ror__ = __or__
 
-    if sys.version_info >= (3, 13):
+    def values(self):
+        return dict_values(self)
 
-        def values(self):
-            return dict_values(self)
+    def keys(self):
+        return dict_keys(self)
 
-        def keys(self):
-            return dict_keys(self)
-
-        def items(self):
-            return dict_items(self)
+    def items(self):
+        return dict_items(self)
 
 
 _MISSING = object()
@@ -243,19 +248,13 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         return self._reversed()
 
     def _reversed(self):
-        deleted = []
         mutations = self._mutations
         for k in reversed(mutations):
-            if mutations[k] is _DELETED:
-                deleted.append(k)
-                continue
-            else:
+            if mutations[k] is not _DELETED:
                 yield k
-        inner = self._inner
-        for k in reversed(inner):
-            if k in deleted:
-                continue
-            else:
+        suppress = list(mutations.keys())  # check against list to avoid hash
+        for k in reversed(self._inner):
+            if k not in suppress:
                 yield k
 
     def __iter__(self):

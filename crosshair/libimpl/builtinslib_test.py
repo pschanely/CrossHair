@@ -75,6 +75,7 @@ from crosshair.libimpl.builtinslib import (
     smt_not,
 )
 from crosshair.options import AnalysisOptionSet
+from crosshair.simplestructs import dict_items, dict_keys, dict_values
 from crosshair.statespace import (
     CANNOT_CONFIRM,
     CONFIRMED,
@@ -1619,6 +1620,67 @@ def test_bytes_transforms_match_cpython(space):
             assert realize(sym.lstrip()) == raw.lstrip()
             assert realize(sym.rstrip()) == raw.rstrip()
             assert realize(sym.strip(b"ab")) == raw.strip(b"ab")
+
+
+def test_symbolic_bytearray_methods_return_bytearray(space):
+    raw = bytearray(b"Ab\tCd\nEf")
+    ba = proxy_for_type(bytearray, "ba")
+    with ResumedTracing():
+        space.add(len(ba) == len(raw))
+        for i, byte in enumerate(raw):
+            space.add(ba[i] == byte)
+        for result, expected in (
+            (ba.capitalize(), raw.capitalize()),
+            (ba.center(12), raw.center(12)),
+            (ba.expandtabs(), raw.expandtabs()),
+            (ba.join([b"a", b"b"]), raw.join([b"a", b"b"])),
+            (ba.ljust(12), raw.ljust(12)),
+            (ba.rjust(12), raw.rjust(12)),
+            (ba.title(), raw.title()),
+            (ba.zfill(12), raw.zfill(12)),
+            (ba.strip(b"Ab"), raw.strip(b"Ab")),
+            (ba.lstrip(b"Ab"), raw.lstrip(b"Ab")),
+            (ba.rstrip(b"Ef"), raw.rstrip(b"Ef")),
+            (ba.replace(b"C", b"c"), raw.replace(b"C", b"c")),
+        ):
+            assert type(result) is bytearray
+            assert realize(result) == expected
+        for result, expected in (
+            (ba.split(), raw.split()),
+            (ba.rsplit(), raw.rsplit()),
+            (ba.splitlines(), raw.splitlines()),
+        ):
+            assert all(type(part) is bytearray for part in result)
+            assert realize(result) == expected
+        for result, expected in (
+            (ba.partition(b"C"), raw.partition(b"C")),
+            (ba.rpartition(b"C"), raw.rpartition(b"C")),
+        ):
+            assert all(type(part) is bytearray for part in result)
+            assert realize(result) == expected
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 15), reason="bytearray.take_bytes requires 3.15+"
+)
+@pytest.mark.parametrize("n", [None, 0, 2, 4, -1, -4, 5, -5, True, 1.5, "a"])
+def test_symbolic_bytearray_take_bytes(space, n):
+    raw = bytearray(b"abcd")
+    ba = proxy_for_type(bytearray, "ba")
+    with ResumedTracing():
+        space.add(len(ba) == len(raw))
+        for i, byte in enumerate(raw):
+            space.add(ba[i] == byte)
+        try:
+            taken = ba.take_bytes(n)
+        except (IndexError, TypeError) as exc:
+            with pytest.raises(type(exc)):
+                raw.take_bytes(n)
+            assert realize(ba) == b"abcd"
+        else:
+            assert type(taken) is bytes
+            assert realize(taken) == raw.take_bytes(n)
+            assert realize(ba) == raw
 
 
 def test_bytes_strip_rejects_int_chars(space):
@@ -3398,6 +3460,29 @@ def test_dict_items_ok(space: StateSpace) -> None:
         a[10] = "ten"
         items = a.items()
         assert realize(items.__contains__((10, "ten")))
+
+
+def test_symbolic_dict_views_return_dict_view_types(space: StateSpace) -> None:
+    a = proxy_for_type(Dict[int, str], "a")
+    with ResumedTracing():
+        space.add(len(a) == 1)
+        a[10] = "ten"
+        keys, items, values = a.keys(), a.items(), a.values()
+        assert type(keys) is dict_keys
+        assert type(items) is dict_items
+        assert type(values) is dict_values
+        assert realize(list(keys)) == [10]
+        assert realize(list(items)) == [(10, "ten")]
+        assert realize(list(values)) == ["ten"]
+        assert realize(keys & {10, 11}) == {10}
+        assert realize(keys.isdisjoint({11}))
+        assert realize(items == {(10, "ten")})
+        assert realize(list(reversed(keys))) == [10]
+        assert realize(10 in keys)
+        assert len(items) == 1
+        assert type(deep_realize(keys)) is type({}.keys())
+        assert type(deep_realize(items)) is type({}.items())
+        assert type(deep_realize(values)) is type({}.values())
 
 
 def test_dict_setdefault_float_int_comparison(space: StateSpace) -> None:

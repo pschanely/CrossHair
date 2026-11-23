@@ -9,6 +9,15 @@ Next Version
  * Faster solving for integer true division (``int / int``) under the
    IEEE float representation. The overflow check is now a linear integer
    comparison instead of a float conversion.
+ * Fixed symbolic ``bytearray`` methods (``split``, ``join``, ``capitalize``,
+   ``center``, ``title``, and others) returning ``bytes`` instead of
+   ``bytearray``. Symbolic dict views on Python < 3.13 are now
+   ``dict_keys`` / ``dict_items`` / ``dict_values`` (``collections.abc`` view
+   subclasses) and realize to real dict views.
+ * Added symbolic ``bytearray.take_bytes`` (Python 3.15+).
+ * Fixed ``reversed()`` on a mutated symbolic dict (for example, the result of
+   ``|``) yielding overwritten keys twice.
+   (`see #518 <https://github.com/pschanely/CrossHair/issues/518>`__)
 
 
 Version 0.0.114
