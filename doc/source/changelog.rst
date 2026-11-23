@@ -6,6 +6,9 @@ Changelog
 Next Version
 ---------------
 
+ * Faster solving for integer true division (``int / int``) under the
+   IEEE float representation. The overflow check is now a linear integer
+   comparison instead of a float conversion.
  * Fixed symbolic ``bytearray`` methods (``split``, ``join``, ``capitalize``,
    ``center``, ``title``, and others) returning ``bytes`` instead of
    ``bytearray``. Symbolic dict views on Python < 3.13 are now

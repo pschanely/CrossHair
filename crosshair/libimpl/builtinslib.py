@@ -1082,9 +1082,13 @@ def setup_binops():
             if symbolic_type is RealBasedSymbolicFloat:
                 return RealBasedSymbolicFloat(quotient)
             if symbolic_type is PreciseIeeeSymbolicFloat:
-                converted = smt.real_to_fp(smt.RNE, quotient, _PRECISE_IEEE_FLOAT_SORT)
-                if space.smt_fork(smt.fp_is_infinite(converted)):
+                abs_b = smt.ite(smt_b < 0, -smt_b, smt_b)
+                overflow_limit = smt.int_val(_INT_TO_FLOAT_OVERFLOW_BOUNDARY) * abs_b
+                if space.smt_fork(
+                    smt.or_(smt_a >= overflow_limit, smt_a <= -overflow_limit)
+                ):
                     raise OverflowError("integer division result too large for a float")
+                converted = smt.real_to_fp(smt.RNE, quotient, _PRECISE_IEEE_FLOAT_SORT)
                 signed_zero = smt.ite(
                     smt_b < 0,
                     smt.fp_minus_zero(_PRECISE_IEEE_FLOAT_SORT),
