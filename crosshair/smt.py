@@ -24,15 +24,19 @@ from z3 import (
     Z3_get_ast_kind,
     Z3_get_decl_kind,
     Z3_get_numeral_string,
+    Z3_mk_add,
     Z3_mk_and,
     Z3_mk_app,
     Z3_mk_array_sort,
     Z3_mk_const,
     Z3_mk_const_array,
     Z3_mk_distinct,
+    Z3_mk_div,
     Z3_mk_eq,
     Z3_mk_exists_const,
     Z3_mk_forall_const,
+    Z3_mk_fpa_add,
+    Z3_mk_fpa_div,
     Z3_mk_fpa_eq,
     Z3_mk_fpa_geq,
     Z3_mk_fpa_gt,
@@ -43,8 +47,11 @@ from z3 import (
     Z3_mk_fpa_is_zero,
     Z3_mk_fpa_leq,
     Z3_mk_fpa_lt,
+    Z3_mk_fpa_mul,
     Z3_mk_fpa_nan,
+    Z3_mk_fpa_neg,
     Z3_mk_fpa_round_to_integral,
+    Z3_mk_fpa_sub,
     Z3_mk_fpa_to_fp_real,
     Z3_mk_fpa_to_real,
     Z3_mk_fpa_zero,
@@ -56,14 +63,19 @@ from z3 import (
     Z3_mk_ite,
     Z3_mk_le,
     Z3_mk_lt,
+    Z3_mk_mod,
+    Z3_mk_mul,
     Z3_mk_not,
     Z3_mk_numeral,
     Z3_mk_or,
+    Z3_mk_power,
     Z3_mk_real2int,
     Z3_mk_select,
     Z3_mk_seq_length,
     Z3_mk_store,
     Z3_mk_string_symbol,
+    Z3_mk_sub,
+    Z3_mk_unary_minus,
     Z3_mk_xor,
 )
 from z3 import ModelRef as Model
@@ -287,6 +299,44 @@ def ite(condition: ExprRef, then: ExprRef, otherwise: ExprRef) -> ExprRef:
 # Arithmetic
 
 
+def add(*exprs: ExprRef) -> ExprRef:
+    args, sz = _to_ast_array(exprs)
+    return _to_expr_ref(Z3_mk_add(ctx_ref, sz, args), ctx)
+
+
+def sub(a: ExprRef, b: ExprRef) -> ExprRef:
+    args, sz = _to_ast_array((a, b))
+    return _to_expr_ref(Z3_mk_sub(ctx_ref, sz, args), ctx)
+
+
+def mul(*exprs: ExprRef) -> ExprRef:
+    args, sz = _to_ast_array(exprs)
+    return _to_expr_ref(Z3_mk_mul(ctx_ref, sz, args), ctx)
+
+
+def neg(expr: ExprRef) -> ExprRef:
+    return _to_expr_ref(Z3_mk_unary_minus(ctx_ref, expr.as_ast()), ctx)
+
+
+def div(a: ExprRef, b: ExprRef) -> ExprRef:
+    """Integer division; the remainder is non-negative."""
+    return _to_expr_ref(Z3_mk_div(ctx_ref, a.as_ast(), b.as_ast()), ctx)
+
+
+def mod(a: ExprRef, b: ExprRef) -> ExprRef:
+    """Integer remainder; always non-negative."""
+    return _to_expr_ref(Z3_mk_mod(ctx_ref, a.as_ast(), b.as_ast()), ctx)
+
+
+def real_div(a: ExprRef, b: ExprRef) -> ExprRef:
+    return _to_expr_ref(Z3_mk_div(ctx_ref, a.as_ast(), b.as_ast()), ctx)
+
+
+def power(base: ExprRef, exponent: ExprRef) -> ExprRef:
+    """Exponentiation; the result has real sort."""
+    return _to_expr_ref(Z3_mk_power(ctx_ref, base.as_ast(), exponent.as_ast()), ctx)
+
+
 def lt(a: ExprRef, b: ExprRef) -> BoolRef:
     return BoolRef(Z3_mk_lt(ctx_ref, a.as_ast(), b.as_ast()), ctx)
 
@@ -337,6 +387,34 @@ def seq_len(seq: ExprRef) -> ExprRef:
 
 
 # Floating point
+
+
+def fp_add(rounding_mode: ExprRef, a: ExprRef, b: ExprRef) -> FPRef:
+    return FPRef(
+        Z3_mk_fpa_add(ctx_ref, rounding_mode.as_ast(), a.as_ast(), b.as_ast()), ctx
+    )
+
+
+def fp_sub(rounding_mode: ExprRef, a: ExprRef, b: ExprRef) -> FPRef:
+    return FPRef(
+        Z3_mk_fpa_sub(ctx_ref, rounding_mode.as_ast(), a.as_ast(), b.as_ast()), ctx
+    )
+
+
+def fp_mul(rounding_mode: ExprRef, a: ExprRef, b: ExprRef) -> FPRef:
+    return FPRef(
+        Z3_mk_fpa_mul(ctx_ref, rounding_mode.as_ast(), a.as_ast(), b.as_ast()), ctx
+    )
+
+
+def fp_div(rounding_mode: ExprRef, a: ExprRef, b: ExprRef) -> FPRef:
+    return FPRef(
+        Z3_mk_fpa_div(ctx_ref, rounding_mode.as_ast(), a.as_ast(), b.as_ast()), ctx
+    )
+
+
+def fp_neg(expr: ExprRef) -> FPRef:
+    return FPRef(Z3_mk_fpa_neg(ctx_ref, expr.as_ast()), ctx)
 
 
 def fp_eq(a: ExprRef, b: ExprRef) -> BoolRef:
