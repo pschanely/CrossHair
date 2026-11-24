@@ -127,7 +127,7 @@ saying it in regular Python (i.e. ``symbolic_x + 1``).
 booleans::
 
     >>> (symbolic_x >= 0).var
-    0 <= x
+    x >= 0
 
 So far, everything is symbolic. But eventually, the Python interpreter
 needs a real value; consider::
