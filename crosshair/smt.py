@@ -1,11 +1,13 @@
 """
-SMT sorts, terms, and term constructors.
+SMT sorts, terms, solvers, and models.
 
 Names follow SMT-LIB. Constructors never convert Python values into terms;
 use the ``*_val`` functions to build literals.
 """
 
-from typing import Dict, Sequence, Tuple
+import ast
+from fractions import Fraction
+from typing import Dict, List, Optional, Sequence, Tuple, cast
 
 import z3  # type: ignore
 from z3 import (
@@ -64,8 +66,18 @@ from z3 import (
     Z3_mk_string_symbol,
     Z3_mk_xor,
 )
+from z3 import ModelRef as Model
 from z3 import Z3Exception as Z3Exception
 from z3.z3 import Sort, _to_ast_array, _to_expr_ref, _to_sort_ref  # type: ignore
+
+from crosshair.smtlib import parse_smtlib_literal
+from crosshair.util import (
+    MAX_REALIZED_INT_BITS,
+    CrosshairUnsupported,
+    UnknownSatisfiability,
+    ch_stack,
+    debug,
+)
 
 ctx = z3.main_ctx()
 ctx_ref = ctx.ref()
@@ -389,6 +401,14 @@ def real_to_fp(rounding_mode: ExprRef, expr: ExprRef, sort: SortRef) -> FPRef:
     )
 
 
+def has_bool_sort(expr: ExprRef) -> bool:
+    return z3.is_bool(expr)
+
+
+def has_real_sort(expr: ExprRef) -> bool:
+    return z3.is_real(expr)
+
+
 def has_fp_sort(expr: ExprRef) -> bool:
     return z3.is_fp(expr)
 
@@ -408,3 +428,211 @@ def exists(variables: Sequence[ExprRef], body: ExprRef) -> BoolRef:
     return _to_expr_ref(
         Z3_mk_exists_const(ctx_ref, 1, num_bound, bound, 0, None, body.as_ast()), ctx
     )
+
+
+# Term inspection
+
+
+def is_same_term(a: ExprRef, b: ExprRef) -> bool:
+    return a.eq(b)
+
+
+def is_uninterpreted_const(expr: ExprRef) -> bool:
+    return z3.is_const(expr) and expr.decl().kind() == z3.Z3_OP_UNINTERPRETED
+
+
+def is_true(expr: ExprRef) -> bool:
+    return z3.is_true(expr)
+
+
+def is_false(expr: ExprRef) -> bool:
+    return z3.is_false(expr)
+
+
+def _ground_int_bits(term: ExprRef) -> Optional[int]:
+    """
+    Bound the bit length of a ground integer term.
+
+    Recognizes numerals, and powers (with natural exponents) combined by +, -, *,
+    and to_int. Returns None for any other term.
+    """
+    if z3.is_int_value(term):
+        return numeral_to_int(term).bit_length()
+    if z3.is_rational_value(term):
+        return max(
+            numeral_to_int(term.numerator()).bit_length(),
+            numeral_to_int(term.denominator()).bit_length(),
+        )
+    if z3.is_app(term):
+        kind, kids = term.decl().kind(), term.children()
+        if (
+            kind == z3.Z3_OP_POWER
+            and z3.is_int_value(kids[1])
+            and kids[1].as_long() >= 0
+        ):
+            base_bits = _ground_int_bits(kids[0])
+            if base_bits is not None:
+                return base_bits * max(kids[1].as_long(), 1)
+        elif kind in (z3.Z3_OP_MUL, z3.Z3_OP_ADD, z3.Z3_OP_SUB):
+            parts = [_ground_int_bits(k) for k in kids]
+            if all(p is not None for p in parts):
+                bits = cast(List[int], parts)
+                return sum(bits) if kind == z3.Z3_OP_MUL else max(bits, default=0) + 1
+        elif kind in (z3.Z3_OP_UMINUS, z3.Z3_OP_TO_INT, z3.Z3_OP_TO_REAL) and kids:
+            return _ground_int_bits(kids[0])
+    return None
+
+
+def _realize_capped_int(value: ExprRef) -> Optional[int]:
+    """
+    Evaluate a ground integer term that z3 left unsimplified.
+
+    z3 caps power expansion at max_degree=64; this refolds with the cap lifted.
+    Raises CrosshairUnsupported for a result too large to hold in memory, and
+    returns None for a term that isn't ground.
+    """
+    bits = _ground_int_bits(value)
+    if bits is None:
+        return None
+    if bits > MAX_REALIZED_INT_BITS:
+        raise CrosshairUnsupported("integer too large to realize", value.sexpr()[:60])
+    folded = z3.simplify(value, max_degree=MAX_REALIZED_INT_BITS)
+    if not z3.is_int_value(folded):
+        raise CrosshairUnsupported("could not realize integer", value.sexpr()[:60])
+    return numeral_to_int(folded)
+
+
+def to_python(value: ExprRef) -> object:
+    """Convert a ground term (such as a model value) to a Python value."""
+    if z3.is_real(value):
+        if isinstance(value, z3.AlgebraicNumRef):
+            # Force irrational values to be rational:
+            value = value.approx(precision=20)
+        return float(
+            Fraction(
+                numeral_to_int(value.numerator()),
+                numeral_to_int(value.denominator()),
+            )
+        )
+    elif z3.is_seq(value):
+        ret = []
+        while value.num_args() == 2:
+            ret.append(to_python(value.arg(0).arg(0)))
+            value = value.arg(1)
+        if value.num_args() == 1:
+            ret.append(to_python(value.arg(0)))
+        return ret
+    elif z3.is_fp(value):
+        return parse_smtlib_literal(value.sexpr())
+    elif z3.is_int_value(value):
+        return numeral_to_int(value)
+    elif hasattr(value, "py_value"):
+        if z3.is_int(value):
+            realized = _realize_capped_int(value)
+            if realized is not None:
+                return realized
+        return value.py_value()
+    elif z3.is_int(value):  # z3 versions without py_value
+        return value.as_long()
+    else:
+        return ast.literal_eval(repr(value))
+
+
+# Models
+
+
+def model_eval(model: Model, expr: ExprRef) -> ExprRef:
+    """Evaluate ``expr`` in ``model``, choosing values for unconstrained terms."""
+    return model.eval(expr, model_completion=True)
+
+
+def model_satisfies(model: Model, expr: ExprRef) -> bool:
+    return z3.is_true(model.eval(expr, model_completion=True))
+
+
+# Solvers
+
+
+def _make_z3_solver() -> z3.Solver:
+    smt_tactic = z3.Tactic("smt", ctx)
+    solver = z3.Solver(z3.Z3_mk_solver_from_tactic(ctx_ref, smt_tactic.tactic), ctx)
+    solver.set("mbqi", True)
+    # turn off every randomization thing we can think of:
+    solver.set("random-seed", 42)
+    solver.set("smt.random-seed", 42)
+    return solver
+
+
+class Solver:
+    """
+    An incremental, deterministic solver.
+
+    ``assertion_version`` increments whenever assertions are added.
+    """
+
+    assertion_version: int = 0
+
+    def __init__(self) -> None:
+        self._solver = _make_z3_solver()
+
+    def assert_(self, *exprs: ExprRef) -> None:
+        self.assertion_version += 1
+        solver = self._solver.solver
+        for expr in exprs:
+            z3.Z3_solver_assert(ctx_ref, solver, expr.as_ast())
+
+    def is_sat(self, *assumptions: ExprRef) -> bool:
+        """
+        Check whether the assertions and ``assumptions`` are satisfiable.
+
+        Raises UnknownSatisfiability when the solver cannot decide.
+        """
+        solver = self._solver
+        ret = solver.check(*assumptions)
+        if ret == z3.unknown:
+            reason = solver.reason_unknown()
+            debug("Z3 Unknown satisfiability. Reason:", reason)
+            debug("Call stack at time of unknown sat:", ch_stack())
+            if reason == "interrupted from keyboard":
+                raise KeyboardInterrupt
+            if assumptions:
+                debug("While attempting to assert\n", *(e.sexpr() for e in assumptions))
+            debug("Solver state follows:\n", solver.sexpr())
+            raise UnknownSatisfiability
+        return ret == z3.sat
+
+    def model(self) -> Model:
+        """Get a model from the last successful ``is_sat`` check."""
+        return self._solver.model()
+
+    def assertions(self) -> List[ExprRef]:
+        return list(self._solver.assertions())
+
+    def set_timeout(self, milliseconds: int) -> None:
+        """Limit the wall-clock time of each check."""
+        self._solver.set(timeout=milliseconds)
+
+    def set_rlimit(self, rlimit: int) -> None:
+        """Limit the deterministic (abstract) work of each check."""
+        self._solver.set("rlimit", rlimit)
+
+    def __str__(self) -> str:
+        return self._solver.sexpr()
+
+
+def unsat_core(exprs: Sequence[ExprRef]) -> Optional[List[ExprRef]]:
+    """
+    Find a minimal unsatisfiable subset of ``exprs`` using a fresh solver.
+
+    Returns None when the fresh solver does not find ``exprs`` unsatisfiable.
+    """
+    solver = _make_z3_solver()
+    solver.set(unsat_core=True)
+    by_tracker: Dict[str, ExprRef] = {}
+    for i, expr in enumerate(exprs):
+        name = f"__ch_track_{i}"
+        by_tracker[name] = expr
+        solver.assert_and_track(expr, const(name, bool_sort))
+    if solver.check() != z3.unsat:
+        return None
+    return [by_tracker[t.decl().name()] for t in solver.unsat_core()]
