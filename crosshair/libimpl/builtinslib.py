@@ -2,6 +2,7 @@ import codecs
 import collections
 import copy
 import enum
+import functools
 import io
 import operator as ops
 import os
@@ -403,10 +404,10 @@ class AtomicSymbolicValue(SymbolicValue):
     def _smt_for_unification(self, other_value: Any):
         """See :func:`~crosshair.core.smt_for_unification`"""
         if isinstance(other_value, self.__class__):
-            return self.var == other_value.var
+            return smt.eq(self.var, other_value.var)
         coerced = type(self)._coerce_to_smt_sort(other_value)
         if coerced is not None:
-            return self.var == coerced
+            return smt.eq(self.var, coerced)
         return None
 
     def __eq__(self, other):
@@ -414,14 +415,14 @@ class AtomicSymbolicValue(SymbolicValue):
             coerced = type(self)._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
-            return SymbolicBool(self.var == coerced)
+            return SymbolicBool(smt.eq(self.var, coerced))
 
     def __ne__(self, other):
         with NoTracing():
             coerced = type(self)._coerce_to_smt_sort(other)
             if coerced is None:
                 return True
-            return SymbolicBool(self.var != coerced)
+            return SymbolicBool(smt.distinct(self.var, coerced))
 
 
 _PYTYPE_TO_WRAPPER_TYPE: Dict[
@@ -532,6 +533,7 @@ def force_to_smt_sort(
 
 TypePair = Tuple[type, type]
 BinFn = Callable[[Any, Any], Any]
+SmtBinFn = Callable[[smt.ExprRef, smt.ExprRef], smt.ExprRef]
 OpHandler = Union[_Missing, Callable[[BinFn, Number, Number], Number]]
 
 _BIN_OPS: Dict[Tuple[BinFn, type, type], OpHandler] = {}
@@ -686,50 +688,21 @@ _VALID_OPS_ON_COMPLEX_TYPES: Set[BinFn] = {
 }
 
 
-def apply_smt(op: BinFn, x: smt.ExprRef, y: smt.ExprRef) -> smt.ExprRef:
-    # Mostly, z3 overloads operators and things just work.
-    # But some special cases need to be checked first.
-    # TODO: we should investigate using the op override mechanism to
-    # dispatch to the right SMT operations.
-    space = context_statespace()
-    if op in (ops.eq, ops.ne) and smt.has_fp_sort(x) and smt.has_fp_sort(y):
-        # On floats, z3's `==`/`!=` are structural, not IEEE: +0.0 and -0.0
-        # compare unequal, and NaN compares equal to itself.
-        smt_eq = smt.fp_eq(x, y)
-        return smt_eq if op is ops.eq else smt.not_(smt_eq)
-    if op in _ARITHMETIC_OPS:
-        if op in (ops.truediv, ops.floordiv, ops.mod):
-            if op != ops.truediv and smt.has_fp_sort(x):
-                concrete = op(space.find_model_value(x), space.find_model_value(y))
-                return smt.fp_val(concrete, x.sort())
-            iszero = (
-                smt.fp_eq(y, smt.fp_val(0.0, y.sort()))
-                if isinstance(y, smt.FPRef)
-                else (y == 0)
-            )
-            if space.smt_fork(iszero):
-                raise ZeroDivisionError
-            if op == ops.floordiv:
-                if space.smt_fork(y >= 0):
-                    if space.smt_fork(x >= 0):
-                        return x / y
-                    else:
-                        return -((y - x - 1) / y)
-                else:
-                    if space.smt_fork(x >= 0):
-                        return -((x - y - 1) / -y)
-                    else:
-                        return -x / -y
-            if op == ops.mod:
-                if space.smt_fork(smt.or_(y >= 0, x % y == 0)):
-                    return x % y
-                else:
-                    return (x % y) + y
-    return op(x, y)
-
-
 _ARITHMETIC_AND_COMPARISON_OPS = _ARITHMETIC_OPS.union(_COMPARISON_OPS)
 _ALL_OPS = _ARITHMETIC_AND_COMPARISON_OPS.union(_BITWISE_OPS)
+
+_SMT_INT_ZERO = smt.int_val(0)
+_SMT_INT_ONE = smt.int_val(1)
+_SMT_REAL_ZERO = smt.real_val(0)
+
+_SMT_ORDERED_COMPARISONS: Dict[BinFn, SmtBinFn] = {
+    ops.eq: smt.eq,
+    ops.ne: smt.distinct,
+    ops.lt: smt.lt,
+    ops.le: smt.le,
+    ops.gt: smt.gt,
+    ops.ge: smt.ge,
+}
 
 # Keep base**exp symbolic (so the solver can invert it, e.g. a**3 == 343) only up
 # to this exponent; z3 can't reason about a higher-degree power anyway.
@@ -740,7 +713,7 @@ _MAX_SYMBOLIC_POW_DEGREE = 64
 def _symbolic_int_pow(base: Union[int, "SymbolicInt"], exp: int) -> Number:
     """base ** exp for a concrete exponent >= 1."""
     if isinstance(base, SymbolicInt) and exp <= _MAX_SYMBOLIC_POW_DEGREE:
-        return SymbolicInt(smt.to_int(base.var ** smt.int_val(exp)))
+        return SymbolicInt(smt.to_int(smt.power(base.var, smt.int_val(exp))))
     concrete_base = realize(base)
     if concrete_base not in (-1, 0, 1) and (
         exp * concrete_base.bit_length() > MAX_REALIZED_INT_BITS
@@ -749,14 +722,22 @@ def _symbolic_int_pow(base: Union[int, "SymbolicInt"], exp: int) -> Number:
     return concrete_base**exp
 
 
-_IEEE_COMPARISONS: Dict[BinFn, Callable[[smt.ExprRef, smt.ExprRef], smt.ExprRef]] = {
-    ops.eq: smt.fp_eq,
-    ops.ne: smt.fp_neq,
-    ops.lt: smt.fp_lt,
-    ops.le: smt.fp_le,
-    ops.gt: smt.fp_gt,
-    ops.ge: smt.fp_ge,
-}
+def _int_term(value: Union[int, "SymbolicInt"]) -> smt.ExprRef:
+    return value.var if isinstance(value, SymbolicInt) else smt.int_val(value)
+
+
+def _float_term(
+    symbolic_type: Type["SymbolicFloat"], value: Union["SymbolicFloat", KindedFloat]
+) -> smt.ExprRef:
+    if isinstance(value, KindedFloat):
+        return symbolic_type._smt_promote_literal(value.val)  # type: ignore
+    return value.var
+
+
+def _float_operand_type(
+    a: Union["SymbolicFloat", KindedFloat], b: Union["SymbolicFloat", KindedFloat]
+) -> Type["SymbolicFloat"]:
+    return type(b) if isinstance(a, KindedFloat) else type(a)  # type: ignore
 
 
 def setup_binops():
@@ -774,7 +755,7 @@ def setup_binops():
     # Almost all operators involving booleans should upconvert to integers.
     def _(a: SymbolicBool, b: Number):
         with NoTracing():
-            return (SymbolicInt(smt.ite(a.var, smt.int_val(1), smt.int_val(0))), b)
+            return (SymbolicInt(smt.ite(a.var, _SMT_INT_ONE, _SMT_INT_ZERO)), b)
 
     setup_promotion(_, _ALL_OPS)
 
@@ -801,14 +782,14 @@ def setup_binops():
         op: BinFn, a: Union[int, SymbolicInt], b: Union[float, SymbolicFloat]
     ):
         with NoTracing():
-            aval = a.var if isinstance(a, SymbolicInt) else smt.int_val(a)
-            smt_a = smt.to_real(aval)
+            smt_a = smt.to_real(_int_term(a))
+            real_op = RealBasedSymbolicFloat._smt_binops[op]
             if isinstance(b, RealBasedSymbolicFloat):
-                return SymbolicBool(op(smt_a, b.var))
+                return SymbolicBool(real_op(smt_a, b.var))
             if isinstance(b, PreciseIeeeSymbolicFloat):
                 is_nan = smt.fp_is_nan(b.var)
                 is_infinite = smt.fp_is_infinite(b.var)
-                finite_comparison = op(smt_a, smt.fp_to_real(b.var))
+                finite_comparison = real_op(smt_a, smt.fp_to_real(b.var))
                 if op is ops.eq:
                     result = smt.and_(smt.not_(is_infinite), finite_comparison)
                 elif op is ops.ne:
@@ -831,8 +812,8 @@ def setup_binops():
             if isinf(b):
                 return op(0, b)
             numerator, denominator = b.as_integer_ratio()
-            smt_b = smt.real_val(numerator) / smt.real_val(denominator)
-            return SymbolicBool(op(smt_a, smt_b))
+            smt_b = smt.real_div(smt.real_val(numerator), smt.real_val(denominator))
+            return SymbolicBool(real_op(smt_a, smt_b))
 
     setup_binop(_compare_int_float, _COMPARISON_OPS)
 
@@ -850,7 +831,9 @@ def setup_binops():
             sort = _PRECISE_IEEE_FLOAT_SORT
             if nearest == a:
                 return SymbolicBool(
-                    _IEEE_COMPARISONS[op](smt.fp_val(nearest, sort), b.var)
+                    PreciseIeeeSymbolicFloat._smt_binops[op](
+                        smt.fp_val(nearest, sort), b.var
+                    )
                 )
             if op is ops.eq:
                 return False
@@ -880,42 +863,59 @@ def setup_binops():
     setup_binop(_, _ALL_OPS)
 
     # float
-    def _(op: BinFn, a: SymbolicFloat, b: KindedFloat):
+    def _(op: BinFn, a: SymbolicFloat, b: Union[SymbolicFloat, KindedFloat]):
         with NoTracing():
-            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
-            bval = symbolic_type._smt_promote_literal(b.val)
-            return SymbolicBool(apply_smt(op, a.var, bval))
+            symbolic_type = type(a)
+            smt_op = symbolic_type._smt_binops[op]
+            return SymbolicBool(smt_op(a.var, _float_term(symbolic_type, b)))
 
     setup_binop(_, _COMPARISON_OPS)
 
-    def _(op: BinFn, a: SymbolicFloat, b: KindedFloat):
+    def _(
+        op: BinFn,
+        a: Union[SymbolicFloat, KindedFloat],
+        b: Union[SymbolicFloat, KindedFloat],
+    ):
         with NoTracing():
-            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
-            bval = symbolic_type._smt_promote_literal(b.val)
-            return symbolic_type(apply_smt(op, a.var, bval), float)
+            symbolic_type = _float_operand_type(a, b)
+            smt_op = symbolic_type._smt_binops[op]
+            return symbolic_type(
+                smt_op(_float_term(symbolic_type, a), _float_term(symbolic_type, b)),
+                float,
+            )
 
-    setup_binop(_, _ARITHMETIC_OPS)
+    setup_binop(_, {ops.add, ops.sub, ops.mul})
 
-    def _(op: BinFn, a: KindedFloat, b: SymbolicFloat):
+    def _(
+        op: BinFn,
+        a: Union[SymbolicFloat, KindedFloat],
+        b: Union[SymbolicFloat, KindedFloat],
+    ):
         with NoTracing():
-            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
-            aval = symbolic_type._smt_promote_literal(a.val)
-            return symbolic_type(apply_smt(op, aval, b.var), float)
+            symbolic_type = _float_operand_type(a, b)
+            smt_ops = symbolic_type._smt_binops
+            smt_a = _float_term(symbolic_type, a)
+            smt_b = _float_term(symbolic_type, b)
+            smt_zero = _float_term(symbolic_type, FiniteFloat(0.0))
+            if context_statespace().smt_fork(smt_ops[ops.eq](smt_b, smt_zero)):
+                raise ZeroDivisionError
+            return symbolic_type(smt_ops[ops.truediv](smt_a, smt_b), float)
 
-    setup_binop(_, _ARITHMETIC_OPS)
+    setup_binop(_, {ops.truediv})
 
-    def _(op: BinFn, a: SymbolicFloat, b: SymbolicFloat):
+    def _(
+        op: BinFn,
+        a: Union[PreciseIeeeSymbolicFloat, KindedFloat],
+        b: Union[PreciseIeeeSymbolicFloat, KindedFloat],
+    ):
         with NoTracing():
-            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
-            return symbolic_type(apply_smt(op, a.var, b.var), float)
+            a_val = a.val if isinstance(a, KindedFloat) else realize(a)
+            b_val = b.val if isinstance(b, KindedFloat) else realize(b)
+            return PreciseIeeeSymbolicFloat(
+                smt.fp_val(op(a_val, b_val), _PRECISE_IEEE_FLOAT_SORT)
+            )
 
-    setup_binop(_, _ARITHMETIC_OPS)
-
-    def _(op: BinFn, a: SymbolicFloat, b: SymbolicFloat):
-        with NoTracing():
-            return SymbolicBool(apply_smt(op, a.var, b.var))
-
-    setup_binop(_, _COMPARISON_OPS)
+    setup_binop(_, {ops.floordiv, ops.mod})
 
     def _(op: BinFn, a: Union[FiniteFloat, RealBasedSymbolicFloat], b: NonFiniteFloat):
         return op(b.get_finite_comparable(a), b.val)
@@ -944,49 +944,64 @@ def setup_binops():
                 and exp.is_integer()
                 and 1 <= exp <= _MAX_SYMBOLIC_POW_DEGREE
             ):
-                return RealBasedSymbolicFloat(a.var ** smt.real_val(int(exp)))
+                return RealBasedSymbolicFloat(smt.power(a.var, smt.real_val(int(exp))))
             base = a.val if isinstance(a, KindedFloat) else realize(a)
             return base**exp
 
     setup_binop(_, {ops.pow})
 
-    # def _(
-    #     op: BinFn, a: NonFiniteFloat, b: NonFiniteFloat
-    # ):  # TODO: isn't this impossible (one must be symbolic)?
-    #     return op(a.val, b.val)  # type: ignore
-
-    # setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
-
     # int
+    def _(op: BinFn, a: Union[int, SymbolicInt], b: Union[int, SymbolicInt]):
+        with NoTracing():
+            smt_op = SymbolicInt._smt_binops[op]
+            return SymbolicInt(smt_op(_int_term(a), _int_term(b)))
+
+    setup_binop(_, {ops.add, ops.sub, ops.mul})
+
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
         with NoTracing():
-            return SymbolicInt(apply_smt(op, a.var, b.var))
-
-    setup_binop(_, _ARITHMETIC_OPS)
-
-    def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
-        with NoTracing():
-            return SymbolicBool(apply_smt(op, a.var, b.var))
+            return SymbolicBool(SymbolicInt._smt_binops[op](a.var, b.var))
 
     setup_binop(_, _COMPARISON_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
         with NoTracing():
-            return SymbolicInt(apply_smt(op, a.var, smt.int_val(b)))
-
-    setup_binop(_, _ARITHMETIC_OPS)
-
-    def _(op: BinFn, a: int, b: SymbolicInt):
-        with NoTracing():
-            return SymbolicInt(apply_smt(op, smt.int_val(a), b.var))
-
-    setup_binop(_, _ARITHMETIC_OPS)
-
-    def _(op: BinFn, a: SymbolicInt, b: int):
-        with NoTracing():
-            return SymbolicBool(apply_smt(op, a.var, smt.int_val(b)))
+            return SymbolicBool(SymbolicInt._smt_binops[op](a.var, smt.int_val(b)))
 
     setup_binop(_, _COMPARISON_OPS)
+
+    def _(op: BinFn, a: Union[int, SymbolicInt], b: Union[int, SymbolicInt]):
+        with NoTracing():
+            x, y = _int_term(a), _int_term(b)
+            space = context_statespace()
+            if space.smt_fork(smt.eq(y, _SMT_INT_ZERO)):
+                raise ZeroDivisionError
+            if space.smt_fork(smt.ge(y, _SMT_INT_ZERO)):
+                if space.smt_fork(smt.ge(x, _SMT_INT_ZERO)):
+                    return SymbolicInt(smt.div(x, y))
+                adjusted = smt.sub(smt.sub(y, x), _SMT_INT_ONE)
+                return SymbolicInt(smt.neg(smt.div(adjusted, y)))
+            if space.smt_fork(smt.ge(x, _SMT_INT_ZERO)):
+                adjusted = smt.sub(smt.sub(x, y), _SMT_INT_ONE)
+                return SymbolicInt(smt.neg(smt.div(adjusted, smt.neg(y))))
+            return SymbolicInt(smt.div(smt.neg(x), smt.neg(y)))
+
+    setup_binop(_, {ops.floordiv})
+
+    def _(op: BinFn, a: Union[int, SymbolicInt], b: Union[int, SymbolicInt]):
+        with NoTracing():
+            x, y = _int_term(a), _int_term(b)
+            space = context_statespace()
+            if space.smt_fork(smt.eq(y, _SMT_INT_ZERO)):
+                raise ZeroDivisionError
+            remainder = smt.mod(x, y)
+            if space.smt_fork(
+                smt.or_(smt.ge(y, _SMT_INT_ZERO), smt.eq(remainder, _SMT_INT_ZERO))
+            ):
+                return SymbolicInt(remainder)
+            return SymbolicInt(smt.add(remainder, y))
+
+    setup_binop(_, {ops.mod})
 
     # An SMT int power, ToInt(x**y), is right only for a positive exponent: a
     # negative one truncates to 0 (Python gives a float) and 0**0 evaluates to 0
@@ -994,9 +1009,9 @@ def setup_binops():
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
         with NoTracing():
             space = context_statespace()
-            if space.smt_fork(b.var < 0):
+            if space.smt_fork(smt.lt(b.var, _SMT_INT_ZERO)):
                 return realize(a) ** realize(b)
-            if space.smt_fork(b.var == 0):
+            if space.smt_fork(smt.eq(b.var, _SMT_INT_ZERO)):
                 return 1
             return _symbolic_int_pow(a, realize(b))
 
@@ -1015,9 +1030,9 @@ def setup_binops():
     def _(op: BinFn, a: int, b: SymbolicInt):
         with NoTracing():
             space = context_statespace()
-            if space.smt_fork(b.var < 0):
+            if space.smt_fork(smt.lt(b.var, _SMT_INT_ZERO)):
                 return a ** realize(b)
-            if space.smt_fork(b.var == 0):
+            if space.smt_fork(smt.eq(b.var, _SMT_INT_ZERO)):
                 return 1
             return _symbolic_int_pow(a, realize(b))
 
@@ -1048,21 +1063,25 @@ def setup_binops():
                 a, b = (b, a)
 
             # Check whether we can interpret the mask as a mod operation:
-            b = realize(b)
-            if b == 0:
+            mask: int = realize(b)  # type: ignore
+            if mask == 0:
                 return 0
             # It's common to use & to mask low bits. We can avoid realization by converting
             # these situations into mod operations.
-            mask_mod = b + 1
-            if b > 0 and mask_mod & b == 0 and isinstance(a, SymbolicInt):  # type: ignore
+            mask_mod = mask + 1
+            if mask > 0 and mask_mod & mask == 0 and isinstance(a, SymbolicInt):
                 space = context_statespace()
-                if space.smt_fork(a.var >= 0, probability_true=0.75):
-                    return SymbolicInt(a.var % mask_mod)
+                smt_mask_mod = smt.int_val(mask_mod)
+                if space.smt_fork(smt.ge(a.var, _SMT_INT_ZERO), probability_true=0.75):
+                    return SymbolicInt(smt.mod(a.var, smt_mask_mod))
                 else:
-                    return SymbolicInt(b - ((-a.var - 1) % mask_mod))
+                    complement = smt.sub(smt.neg(a.var), _SMT_INT_ONE)
+                    return SymbolicInt(
+                        smt.sub(smt.int_val(mask), smt.mod(complement, smt_mask_mod))
+                    )
 
             # Fall back to full realization
-            return op(realize(a), b)
+            return op(realize(a), mask)
 
     setup_binop(_, {ops.and_})
 
@@ -1072,30 +1091,35 @@ def setup_binops():
         b: Union[int, SymbolicInt],
     ):
         with NoTracing():
-            smt_a = a.var if isinstance(a, SymbolicInt) else smt.int_val(a)
-            smt_b = b.var if isinstance(b, SymbolicInt) else smt.int_val(b)
+            smt_a, smt_b = _int_term(a), _int_term(b)
             space = context_statespace()
-            if space.smt_fork(smt_b == 0):
+            if space.smt_fork(smt.eq(smt_b, _SMT_INT_ZERO)):
                 raise ZeroDivisionError("division by zero")
-            quotient = smt.to_real(smt_a) / smt.to_real(smt_b)
+            quotient = smt.real_div(smt.to_real(smt_a), smt.to_real(smt_b))
             symbolic_type = space.extra(ModelingDirector).choose(float)
             if symbolic_type is RealBasedSymbolicFloat:
                 return RealBasedSymbolicFloat(quotient)
             if symbolic_type is PreciseIeeeSymbolicFloat:
-                abs_b = smt.ite(smt_b < 0, -smt_b, smt_b)
-                overflow_limit = smt.int_val(_INT_TO_FLOAT_OVERFLOW_BOUNDARY) * abs_b
+                b_is_negative = smt.lt(smt_b, _SMT_INT_ZERO)
+                abs_b = smt.ite(b_is_negative, smt.neg(smt_b), smt_b)
+                overflow_limit = smt.mul(
+                    smt.int_val(_INT_TO_FLOAT_OVERFLOW_BOUNDARY), abs_b
+                )
                 if space.smt_fork(
-                    smt.or_(smt_a >= overflow_limit, smt_a <= -overflow_limit)
+                    smt.or_(
+                        smt.ge(smt_a, overflow_limit),
+                        smt.le(smt_a, smt.neg(overflow_limit)),
+                    )
                 ):
                     raise OverflowError("integer division result too large for a float")
                 converted = smt.real_to_fp(smt.RNE, quotient, _PRECISE_IEEE_FLOAT_SORT)
                 signed_zero = smt.ite(
-                    smt_b < 0,
+                    b_is_negative,
                     smt.fp_minus_zero(_PRECISE_IEEE_FLOAT_SORT),
                     smt.fp_plus_zero(_PRECISE_IEEE_FLOAT_SORT),
                 )
                 return PreciseIeeeSymbolicFloat(
-                    smt.ite(smt_a == 0, signed_zero, converted)
+                    smt.ite(smt.eq(smt_a, _SMT_INT_ZERO), signed_zero, converted)
                 )
             raise CrossHairInternal
 
@@ -1108,51 +1132,41 @@ def setup_binops():
     ):
         with NoTracing():
             space = context_statespace()
-            bval = RealBasedSymbolicFloat._coerce_to_smt_sort(a)
             # division by zero is checked first
             if not isinstance(b, NonFiniteFloat):
-                smt_b = (
-                    RealBasedSymbolicFloat._smt_promote_literal(b.val)
-                    if isinstance(b, FiniteFloat)
-                    else b.var
-                )
-                if space.smt_fork(smt_b == 0):
+                smt_b = _float_term(RealBasedSymbolicFloat, b)
+                if space.smt_fork(smt.eq(smt_b, _SMT_REAL_ZERO)):
                     raise ZeroDivisionError
             # then the non-finite cases:
             if isinstance(a, NonFiniteFloat):
                 return (nan, nan)
-            smt_a = (
-                RealBasedSymbolicFloat._smt_promote_literal(a.val)
-                if isinstance(a, FiniteFloat)
-                else a.var
-            )
-            assert smt_a is not None
+            smt_a = _float_term(RealBasedSymbolicFloat, a)
             if isinstance(b, NonFiniteFloat):
                 if isnan(b.val):
                     return (nan, nan)
                 # Deduced the rules for infinitiy based on experimentation!:
-                positive_a = space.smt_fork(smt_a >= 0)
+                positive_a = space.smt_fork(smt.ge(smt_a, _SMT_REAL_ZERO))
                 positive_b = b.val == inf
                 if positive_a ^ positive_b:
-                    if space.smt_fork(smt_a == 0):
+                    if space.smt_fork(smt.eq(smt_a, _SMT_REAL_ZERO)):
                         return (0.0, 0.0) if positive_b else (-0.0, -0.0)
                     return (-1.0, b.val)
                 else:
                     return (0.0, a.val if isinstance(a, FiniteFloat) else a)
-            assert smt_b is not None
 
             remainder = smt.const(f"remainder{space.uniq()}", smt.real_sort)
             modproduct = smt.const(f"modproduct{space.uniq()}", smt.int_sort)
             # From https://docs.python.org/3.3/reference/expressions.html#binary-arithmetic-operations:
             # The modulo operator always yields a result with the same sign as its second operand (or zero).
             # absolute value of the result is strictly smaller than the absolute value of the second operand.
-            space.add(smt_b * modproduct + remainder == smt_a)
-            if space.smt_fork(smt_b > 0):
-                space.add(remainder >= 0)
-                space.add(remainder < smt_b)
+            product = smt.mul(smt_b, smt.to_real(modproduct))
+            space.add(smt.eq(smt.add(product, remainder), smt_a))
+            if space.smt_fork(smt.gt(smt_b, _SMT_REAL_ZERO)):
+                space.add(smt.ge(remainder, _SMT_REAL_ZERO))
+                space.add(smt.lt(remainder, smt_b))
             else:
-                space.add(remainder <= 0)
-                space.add(smt_b < remainder)
+                space.add(smt.le(remainder, _SMT_REAL_ZERO))
+                space.add(smt.lt(smt_b, remainder))
             return (SymbolicInt(modproduct), RealBasedSymbolicFloat(remainder))
 
     def _(
@@ -1183,21 +1197,17 @@ def setup_binops():
     # bool
     def _(op: BinFn, a: SymbolicBool, b: SymbolicBool):
         with NoTracing():
-            return SymbolicBool(apply_smt(op, a.var, b.var))
+            return SymbolicBool(SymbolicBool._smt_binops[op](a.var, b.var))
 
     # Bitwise &/|/^ on bools is logical and/or/xor; keep it symbolic instead of
-    # upconverting to int (z3's Int sort has no bitwise ops, forcing realization).
+    # upconverting to int (the SMT Int sort has no bitwise ops, forcing realization).
     setup_binop(_, {ops.eq, ops.ne, ops.and_, ops.or_, ops.xor})
 
-    def _(op: BinFn, a: SymbolicBool, b: bool):
+    def _(op: BinFn, a: Union[bool, SymbolicBool], b: Union[bool, SymbolicBool]):
         with NoTracing():
-            return SymbolicBool(apply_smt(op, a.var, smt.bool_val(b)))
-
-    setup_binop(_, {ops.and_, ops.or_, ops.xor})
-
-    def _(op: BinFn, a: bool, b: SymbolicBool):
-        with NoTracing():
-            return SymbolicBool(apply_smt(op, smt.bool_val(a), b.var))
+            smt_a = a.var if isinstance(a, SymbolicBool) else smt.bool_val(a)
+            smt_b = b.var if isinstance(b, SymbolicBool) else smt.bool_val(b)
+            return SymbolicBool(SymbolicBool._smt_binops[op](smt_a, smt_b))
 
     setup_binop(_, {ops.and_, ops.or_, ops.xor})
 
@@ -1356,6 +1366,14 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
 
 
 class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
+    _smt_binops: Dict[BinFn, SmtBinFn] = {
+        ops.eq: smt.eq,
+        ops.ne: smt.distinct,
+        ops.and_: smt.and_,
+        ops.or_: smt.or_,
+        ops.xor: smt.xor,
+    }
+
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type = bool):
         assert typ == bool
         SymbolicValue.__init__(self, smtvar, typ)
@@ -1424,6 +1442,13 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
 
 
 class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
+    _smt_binops: Dict[BinFn, SmtBinFn] = {
+        **_SMT_ORDERED_COMPARISONS,
+        ops.add: smt.add,
+        ops.sub: smt.sub,
+        ops.mul: smt.mul,
+    }
+
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type = int):
         assert typ == int
         if (not isinstance(smtvar, str)) and (not smtvar.is_int()):
@@ -1734,6 +1759,8 @@ def make_bounded_int(
 
 
 class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
+    _smt_binops: Dict[BinFn, SmtBinFn]
+
     @classmethod
     def _pytype(cls) -> Type:
         return float
@@ -1773,6 +1800,19 @@ _INT_TO_FLOAT_OVERFLOW_BOUNDARY = 2**1024 - 2**970
 
 
 class PreciseIeeeSymbolicFloat(SymbolicFloat):
+    _smt_binops: Dict[BinFn, SmtBinFn] = {
+        ops.eq: smt.fp_eq,
+        ops.ne: smt.fp_neq,
+        ops.lt: smt.fp_lt,
+        ops.le: smt.fp_le,
+        ops.gt: smt.fp_gt,
+        ops.ge: smt.fp_ge,
+        ops.add: functools.partial(smt.fp_add, smt.RNE),
+        ops.sub: functools.partial(smt.fp_sub, smt.RNE),
+        ops.mul: functools.partial(smt.fp_mul, smt.RNE),
+        ops.truediv: functools.partial(smt.fp_div, smt.RNE),
+    }
+
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type = float):
         if not isinstance(smtvar, str) and not smt.has_fp_sort(smtvar):
             raise CrossHairInternal(
@@ -1865,6 +1905,14 @@ _SMT_ONE_HALF = smt.real_val("1/2")
 
 
 class RealBasedSymbolicFloat(SymbolicFloat):
+    _smt_binops: Dict[BinFn, SmtBinFn] = {
+        **_SMT_ORDERED_COMPARISONS,
+        ops.add: smt.add,
+        ops.sub: smt.sub,
+        ops.mul: smt.mul,
+        ops.truediv: smt.real_div,
+    }
+
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type = float):
         assert typ is float, (
             f"RealBasedSymbolicFloat with unexpected python type ({type(typ)})"
