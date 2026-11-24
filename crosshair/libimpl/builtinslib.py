@@ -1366,7 +1366,7 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
 
 
 class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
-    _smt_binops: Dict[BinFn, SmtBinFn] = {
+    _smt_binops = {
         ops.eq: smt.eq,
         ops.ne: smt.distinct,
         ops.and_: smt.and_,
@@ -1442,7 +1442,7 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
 
 
 class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
-    _smt_binops: Dict[BinFn, SmtBinFn] = {
+    _smt_binops = {
         **_SMT_ORDERED_COMPARISONS,
         ops.add: smt.add,
         ops.sub: smt.sub,
@@ -1759,7 +1759,7 @@ def make_bounded_int(
 
 
 class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
-    _smt_binops: Dict[BinFn, SmtBinFn]
+    _smt_binops = cast(Dict[BinFn, SmtBinFn], {})
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -1800,7 +1800,7 @@ _INT_TO_FLOAT_OVERFLOW_BOUNDARY = 2**1024 - 2**970
 
 
 class PreciseIeeeSymbolicFloat(SymbolicFloat):
-    _smt_binops: Dict[BinFn, SmtBinFn] = {
+    _smt_binops = {
         ops.eq: smt.fp_eq,
         ops.ne: smt.fp_neq,
         ops.lt: smt.fp_lt,
@@ -1905,7 +1905,7 @@ _SMT_ONE_HALF = smt.real_val("1/2")
 
 
 class RealBasedSymbolicFloat(SymbolicFloat):
-    _smt_binops: Dict[BinFn, SmtBinFn] = {
+    _smt_binops = {
         **_SMT_ORDERED_COMPARISONS,
         ops.add: smt.add,
         ops.sub: smt.sub,
