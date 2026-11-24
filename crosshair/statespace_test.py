@@ -2,7 +2,6 @@ import copy
 import time
 
 import pytest
-import z3  # type: ignore
 
 from crosshair import smt
 from crosshair.core import Patched, proxy_for_type
@@ -13,12 +12,10 @@ from crosshair.statespace import (
     StateSpace,
     StateSpaceContext,
     SymbolicHeap,
-    model_value_to_python,
 )
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing
 from crosshair.util import (
     CrossHairInternal,
-    CrosshairUnsupported,
     UnknownSatisfiability,
 )
 
@@ -53,7 +50,7 @@ def test_timeout() -> None:
 
 def test_infinite_timeout() -> None:
     space = StateSpace(time.monotonic() + 1000, float("+inf"), RootNode())
-    assert space.solver.check(True) == z3.sat
+    assert space.solver.is_sat(smt.true)
 
 
 def test_heap_deepcopy() -> None:
@@ -88,37 +85,6 @@ def test_heap_lookup_after_mutation_in_other_heap() -> None:
     assert find_key(space.heap) == []
 
 
-def test_model_value_to_python_AlgebraicNumRef():
-    # Tests that z3.AlgebraicNumRef is handled properly.
-    # See https://github.com/pschanely/CrossHair/issues/242
-    rt2 = z3.simplify(z3.Sqrt(2))
-    assert type(rt2) == z3.AlgebraicNumRef
-    model_value_to_python(rt2)
-
-
-def test_model_value_to_python_ArithRef():
-    # Tests that a plain z3.ArithRef can be exported as Python
-    # See https://github.com/pschanely/CrossHair/issues/381
-    rt2 = smt.to_int(2 ** smt.const("x", smt.int_sort))
-    print("type(rt2)", type(rt2))
-    assert type(rt2) == z3.ArithRef
-    model_value_to_python(rt2)
-
-
-def test_model_value_to_python_unfolded_power():
-    # z3's simplifier leaves a ground power above max_degree=64 unevaluated;
-    # realization must refold it rather than return None.
-    unfolded = z3.simplify(smt.to_int(smt.int_val(7) ** smt.int_val(200)))
-    assert not z3.is_int_value(unfolded)
-    assert model_value_to_python(unfolded) == 7**200
-
-
-def test_model_value_to_python_refuses_astronomical_int():
-    huge = smt.to_int(smt.int_val(2) ** smt.int_val(5_000_000))
-    with pytest.raises(CrosshairUnsupported):
-        model_value_to_python(huge)
-
-
 def test_smt_fanout(space: SimpleStateSpace):
     option1 = smt.const("option1", smt.bool_sort)
     option2 = smt.const("option2", smt.bool_sort)
@@ -137,13 +103,12 @@ def test_smt_fanout(space: SimpleStateSpace):
 
 def test_realization_unsat_debug_reports_core(space: SimpleStateSpace):
     x = smt.const("x", smt.int_sort)
-    space.solver.add(x > 5)
-    space.solver.add(x < 3)
+    space.solver.assert_(x > 5)
+    space.solver.assert_(x < 3)
     with pytest.raises(CrossHairInternal) as exc_info:
         space._raise_unexpected_realization_unsat(x, None)
     message = str(exc_info.value)
-    assert "fresh same-config solver.check(): unsat" in message
-    assert "minimal unsat core:" in message
+    assert "fresh solver: unsat; minimal unsat core:" in message
     assert "x > 5" in message
     assert "x < 3" in message
 
@@ -157,10 +122,7 @@ def _run_in_space(space, fn):
     "add_constraint",
     [
         lambda space, x, v: space.add(x != v),
-        lambda space, x, v: space.solver.add(x != v),
-        lambda space, x, v: space.solver.from_string(
-            f"(declare-const x Int) (assert (not (= x {v})))"
-        ),
+        lambda space, x, v: space.solver.assert_(x != v),
     ],
 )
 def test_nondeterministic_realization_is_detected(add_constraint):

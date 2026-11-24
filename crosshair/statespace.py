@@ -1,7 +1,5 @@
-import ast
 import builtins
 import contextvars
-import copy
 import enum
 import functools
 import random
@@ -12,7 +10,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from sys import _getframe
 from time import process_time
-from traceback import extract_stack, format_tb
+from traceback import format_tb
 from types import FrameType
 from typing import (
     Any,
@@ -30,8 +28,6 @@ from typing import (
     overload,
 )
 
-import z3  # type: ignore
-
 from crosshair import dynamic_typing, smt
 from crosshair.condition_parser import ConditionExpr
 from crosshair.copyext import (
@@ -43,14 +39,11 @@ from crosshair.copyext import (
     memoize_copy,
     note_lazy_copy_source,
 )
-from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
     CROSSHAIR_SMT_RLIMIT,
-    MAX_REALIZED_INT_BITS,
     CrossHairInternal,
-    CrosshairUnsupported,
     IgnoreAttempt,
     NotDeterministic,
     PathTimeout,
@@ -214,96 +207,9 @@ else:
         return fn
 
 
-def _ground_int_bits(term: smt.ExprRef) -> Optional[int]:
-    """An upper bound on the bit length of a *ground* integer term -- a power z3's
-    simplifier left unfolded, possibly wrapped in +/-/* or to_int -- or None when
-    the term isn't a recognized ground arithmetic shape (e.g. it has a free var)."""
-    if z3.is_int_value(term):
-        return smt.numeral_to_int(term).bit_length()
-    if z3.is_rational_value(term):
-        return max(
-            smt.numeral_to_int(term.numerator()).bit_length(),
-            smt.numeral_to_int(term.denominator()).bit_length(),
-        )
-    if z3.is_app(term):
-        kind, kids = term.decl().kind(), term.children()
-        if (
-            kind == z3.Z3_OP_POWER
-            and z3.is_int_value(kids[1])
-            and kids[1].as_long() >= 0
-        ):
-            base_bits = _ground_int_bits(kids[0])
-            if base_bits is not None:
-                return base_bits * max(kids[1].as_long(), 1)
-        elif kind in (z3.Z3_OP_MUL, z3.Z3_OP_ADD, z3.Z3_OP_SUB):
-            parts = [_ground_int_bits(k) for k in kids]
-            if all(p is not None for p in parts):
-                bits = cast(List[int], parts)
-                return sum(bits) if kind == z3.Z3_OP_MUL else max(bits, default=0) + 1
-        elif kind in (z3.Z3_OP_UMINUS, z3.Z3_OP_TO_INT, z3.Z3_OP_TO_REAL) and kids:
-            return _ground_int_bits(kids[0])
-    return None
-
-
-def _realize_capped_int(value: smt.ExprRef) -> Optional[int]:
-    """Realize an integer term z3 left as an unevaluated ground power (z3 caps its
-    power expansion at max_degree=64) by refolding with the cap lifted. Refuses
-    (CrosshairUnsupported) a result too large to hold in memory, and returns None
-    for a non-ground term (which has no single value; the caller falls back)."""
-    bits = _ground_int_bits(value)
-    if bits is None:
-        return None
-    if bits > MAX_REALIZED_INT_BITS:
-        raise CrosshairUnsupported("integer too large to realize", value.sexpr()[:60])
-    folded = z3.simplify(value, max_degree=MAX_REALIZED_INT_BITS)
-    if not z3.is_int_value(folded):
-        raise CrosshairUnsupported("could not realize integer", value.sexpr()[:60])
-    return smt.numeral_to_int(folded)
-
-
-def is_smt_variable(expr: smt.ExprRef) -> bool:
-    return z3.is_const(expr) and expr.decl().kind() == z3.Z3_OP_UNINTERPRETED
-
-
-def model_value_to_python(value: smt.ExprRef) -> object:
-    if z3.is_real(value):
-        if isinstance(value, z3.AlgebraicNumRef):
-            # Force irrational values to be rational:
-            value = value.approx(precision=20)
-        return float(
-            Fraction(
-                smt.numeral_to_int(value.numerator()),
-                smt.numeral_to_int(value.denominator()),
-            )
-        )
-    elif z3.is_seq(value):
-        ret = []
-        while value.num_args() == 2:
-            ret.append(model_value_to_python(value.arg(0).arg(0)))
-            value = value.arg(1)
-        if value.num_args() == 1:
-            ret.append(model_value_to_python(value.arg(0)))
-        return ret
-    elif z3.is_fp(value):
-        return parse_smtlib_literal(value.sexpr())
-    elif z3.is_int_value(value):
-        return smt.numeral_to_int(value)
-    elif hasattr(value, "py_value"):
-        if z3.is_int(value):
-            realized = _realize_capped_int(value)
-            if realized is not None:
-                return realized
-        # TODO: how many other cases could be handled with py_value nowadays?
-        return value.py_value()
-    elif z3.is_int(value):  # catch for older z3 versions that don't have py_value
-        return value.as_long()
-    else:
-        return ast.literal_eval(repr(value))
-
-
 @assert_tracing(False)
 def prefer_true(v: Any) -> bool:
-    if not (hasattr(v, "var") and z3.is_bool(v.var)):
+    if not (hasattr(v, "var") and smt.has_bool_sort(v.var)):
         with ResumedTracing():
             v = v.__bool__()
         if not (hasattr(v, "var")):
@@ -314,7 +220,7 @@ def prefer_true(v: Any) -> bool:
 
 def force_true(v: Any) -> None:
     with NoTracing():
-        if not (hasattr(v, "var") and z3.is_bool(v.var)):
+        if not (hasattr(v, "var") and smt.has_bool_sort(v.var)):
             with ResumedTracing():
                 v = v.__bool__()
             if not (hasattr(v, "var")):
@@ -479,20 +385,6 @@ class NodeStem(NodeLike):
 
     def __repr__(self) -> str:
         return "NodeStem()"
-
-
-def solver_is_sat(solver, *exprs) -> bool:
-    ret = solver.check(*exprs)
-    if ret == z3.unknown:
-        debug("Z3 Unknown satisfiability. Reason:", solver.reason_unknown())
-        debug("Call stack at time of unknown sat:", ch_stack())
-        if solver.reason_unknown() == "interrupted from keyboard":
-            raise KeyboardInterrupt
-        if exprs:
-            debug("While attempting to assert\n", *(e.sexpr() for e in exprs))
-        debug("Solver state follows:\n", solver.sexpr())
-        raise UnknownSatisfiability
-    return ret == z3.sat
 
 
 def node_result(node: Optional[NodeLike]) -> Optional[CallAnalysis]:
@@ -793,8 +685,10 @@ class ModelValueNode(WorstResultNode):
         forced_path: Optional[bool],
     ):
         self.condition_value = condition_value
-        self._stats_key = f"realize_{expr}" if z3.is_const(expr) else None
-        WorstResultNode.__init__(self, rand, expr == condition_value, forced_path)
+        self._stats_key = (
+            f"realize_{expr}" if smt.is_uninterpreted_const(expr) else None
+        )
+        WorstResultNode.__init__(self, rand, smt.eq(expr, condition_value), forced_path)
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         stats_key = self._stats_key
@@ -839,46 +733,6 @@ def debug_path_tree(node, highlights, prefix="") -> List[str]:
             return [f"{prefix} -> {str(node)} {node.stats()}"]
 
 
-class VersionedSolver(z3.Solver):
-    """A solver whose ``assertion_version`` increments whenever assertions are added."""
-
-    assertion_version: int = 0
-
-    def assert_exprs(self, *args) -> None:
-        self.assertion_version += 1
-        super().assert_exprs(*args)
-
-    def assert_and_track(self, a, p) -> None:
-        self.assertion_version += 1
-        super().assert_and_track(a, p)
-
-    def from_file(self, filename) -> None:
-        self.assertion_version += 1
-        super().from_file(filename)
-
-    def from_string(self, s) -> None:
-        self.assertion_version += 1
-        super().from_string(s)
-
-    def assert_bool(self, expr: smt.ExprRef) -> None:
-        self.assertion_version += 1
-        z3.Z3_solver_assert(self.ctx.ref(), self.solver, expr.as_ast())
-
-
-def make_default_solver() -> VersionedSolver:
-    """Create a new solver with default settings."""
-    smt_tactic = z3.Tactic("smt")
-    solver = VersionedSolver(
-        z3.Z3_mk_solver_from_tactic(smt_tactic.ctx.ref(), smt_tactic.tactic),
-        smt_tactic.ctx,
-    )
-    solver.set("mbqi", True)
-    # turn off every randomization thing we can think of:
-    solver.set("random-seed", 42)
-    solver.set("smt.random-seed", 42)
-    return solver
-
-
 class StateSpace:
     """Holds various information about the SMT solver's current state."""
 
@@ -892,21 +746,20 @@ class StateSpace:
         model_check_timeout: float,  # supplied to Z3, so wall clock time
         search_root: RootNode,
     ):
-        self.solver = make_default_solver()
+        self.solver = smt.Solver()
         if model_check_timeout < 1 << 63:
             self.smt_timeout: Optional[int] = int(model_check_timeout * 1000 + 1)
-            self.solver.set(timeout=self.smt_timeout)
+            self.solver.set_timeout(self.smt_timeout)
         else:
             self.smt_timeout = None
         # Optional deterministic per-check work budget (see CROSSHAIR_SMT_RLIMIT).
-        # A z3 `timeout` is wall-clock and only softly enforced -- a hard query can
+        # A solver timeout is wall-clock and only softly enforced -- a hard query can
         # overrun it into minutes (observed on Windows), wedging a run. `rlimit`
         # bounds abstract solver work instead, so it stops at the same point on any
-        # machine and can't be overrun. An exhausted budget yields z3.unknown,
-        # which solver_is_sat already handles like any other inconclusive result.
+        # machine and can't be overrun. An exhausted budget is an unknown result.
         if CROSSHAIR_SMT_RLIMIT > 0:
             self.smt_rlimit: Optional[int] = CROSSHAIR_SMT_RLIMIT
-            self.solver.set("rlimit", self.smt_rlimit)
+            self.solver.set_rlimit(self.smt_rlimit)
         else:
             self.smt_rlimit = None
         self.choices_made: List[SearchTreeNode] = []
@@ -918,7 +771,7 @@ class StateSpace:
         self._extras = {}
         self._already_logged: Set[smt.ExprRef] = set()
         self._exprs_known: Dict[smt.ExprRef, bool] = {}
-        self._model: Optional[z3.ModelRef] = None
+        self._model: Optional[smt.Model] = None
         self._model_version = -1
 
         self.execution_deadline = execution_deadline
@@ -953,46 +806,42 @@ class StateSpace:
                     f"Expression '{expr}' was already added to the solver"
                 )
 
-    def _known_model(self) -> Optional[z3.ModelRef]:
+    def _known_model(self) -> Optional[smt.Model]:
         """Return a model of the solver's current assertions, if one is on hand."""
         if self._model_version != self.solver.assertion_version:
             self._model = None
         return self._model
 
-    def _remember_model(self, model: Optional[z3.ModelRef]) -> None:
+    def _remember_model(self, model: Optional[smt.Model]) -> None:
         self._model = model
         self._model_version = self.solver.assertion_version
 
-    @staticmethod
-    def _model_satisfies(model: z3.ModelRef, expr: smt.ExprRef) -> bool:
-        return z3.is_true(model.eval(expr, model_completion=True))
-
-    def witness(self, *exprs: smt.ExprRef) -> Optional[z3.ModelRef]:
+    def witness(self, *exprs: smt.ExprRef) -> Optional[smt.Model]:
         """
         Find a model satisfying the current assertions together with ``exprs``.
 
         Returns None when they are unsatisfiable.
         """
         model = self._known_model()
-        if model is not None and all(self._model_satisfies(model, e) for e in exprs):
+        if model is not None and all(smt.model_satisfies(model, e) for e in exprs):
             return model
-        if not solver_is_sat(self.solver, *exprs):
+        if not self.solver.is_sat(*exprs):
             return None
         model = self.solver.model()
         self._remember_model(model)
         return model
 
-    def _assert(self, expr: smt.ExprRef, witness: Optional[z3.ModelRef] = None) -> None:
+    def _assert(self, expr: smt.ExprRef, witness: Optional[smt.Model] = None) -> None:
         if witness is None:
             model = self._known_model()
-            if model is not None and self._model_satisfies(model, expr):
+            if model is not None and smt.model_satisfies(model, expr):
                 witness = model
-        self.solver.assert_bool(expr)
+        self.solver.assert_(expr)
         self._remember_model(witness)
 
     def _fork_witnesses(
         self, expr: smt.ExprRef
-    ) -> Tuple[Optional[bool], Optional[z3.ModelRef], Optional[z3.ModelRef]]:
+    ) -> Tuple[Optional[bool], Optional[smt.Model], Optional[smt.Model]]:
         """
         Determine which sides of a branch on ``expr`` are satisfiable.
 
@@ -1002,20 +851,20 @@ class StateSpace:
         notexpr = smt.not_(expr)
         model = self._known_model()
         if model is not None:
-            value = model.eval(expr, model_completion=True)
-            if z3.is_true(value):
+            value = smt.model_eval(model, expr)
+            if smt.is_true(value):
                 neg_model = self.witness(notexpr)
                 if neg_model is None:
                     return (True, model, None)
                 return (None, model, neg_model)
-            if z3.is_false(value):
+            if smt.is_false(value):
                 pos_model = self.witness(expr)
                 if pos_model is None:
                     return (False, None, model)
                 return (None, pos_model, model)
         neg_model = self.witness(notexpr)
         if neg_model is None:
-            if CROSSHAIR_EXTRA_ASSERTS and not solver_is_sat(self.solver, expr):
+            if CROSSHAIR_EXTRA_ASSERTS and not self.solver.is_sat(expr):
                 debug(" *** Reached impossible code path *** ")
                 debug("Current solver state:\n", str(self.solver))
                 raise CrossHairInternal("Reached impossible code path")
@@ -1087,9 +936,9 @@ class StateSpace:
                 return expr
             debug("is possible?", expr)
             model = self._known_model()
-            if model is not None and self._model_satisfies(model, expr):
+            if model is not None and smt.model_satisfies(model, expr):
                 return True
-        return solver_is_sat(self.solver, expr)
+        return self.solver.is_sat(expr)
 
     def mark_all_parent_frames(self) -> None:
         frames: Set[FrameType] = set()
@@ -1143,7 +992,7 @@ class StateSpace:
                 # But also see https://github.com/HypothesisWorks/hypothesis/pull/4034#issuecomment-2606415404
                 # or (node.stacktail != stacktail and "Stack trace changed")
                 or (
-                    (hasattr(node, "expr") and (not z3.eq(node.expr, expr)))
+                    (hasattr(node, "expr") and (not smt.is_same_term(node.expr, expr)))
                     and "SMT expression changed"
                 )
             )
@@ -1245,36 +1094,25 @@ class StateSpace:
         raise CrossHairInternal(message)
 
     def _realization_unsat_debug(self) -> str:
-        """Diagnose an unexpected realization-time unsat: report whether a
-        fresh, identically-configured solver agrees the current assertions are
-        unsat (and, if so, the minimal contradicting subset), which
-        distinguishes a genuine contradiction in the accumulated constraints
-        from a corrupted incremental-solver state."""
-        lines: List[str] = []
+        """
+        Describe the current assertions, and whether a fresh solver finds them unsat.
+
+        When it does, include a minimal unsatisfiable subset.
+        """
+        assertions = self.solver.assertions()
+        lines = [f"  assertion count: {len(assertions)}"]
         try:
-            assertions = list(self.solver.assertions())
-        except Exception as exc:
-            return f"  (could not read solver assertions: {exc!r})"
-        lines.append(f"  assertion count: {len(assertions)}")
-        try:
-            fresh = make_default_solver()
-            fresh.set(unsat_core=True)
-            by_name: Dict[str, smt.ExprRef] = {}
-            for i, assertion in enumerate(assertions):
-                lit = smt.const(f"__ch_track_{i}", smt.bool_sort)
-                by_name[lit.decl().name()] = assertion
-                fresh.assert_and_track(assertion, lit)
-            result = fresh.check()
-            lines.append(f"  fresh same-config solver.check(): {result}")
-            if result == z3.unsat:
-                lines.append("  minimal unsat core:")
-                for lit in fresh.unsat_core():
-                    lines.append(f"    {by_name.get(lit.decl().name(), lit)}")
+            core = smt.unsat_core(assertions)
         except Exception as exc:
             lines.append(f"  (fresh-solver diagnosis failed: {exc!r})")
+        else:
+            if core is None:
+                lines.append("  fresh solver: not unsat")
+            else:
+                lines.append("  fresh solver: unsat; minimal unsat core:")
+                lines.extend(f"    {expr}" for expr in core)
         lines.append("  assertions:")
-        for assertion in assertions:
-            lines.append(f"    {assertion}")
+        lines.extend(f"    {expr}" for expr in assertions)
         return "\n".join(lines)
 
     def find_model_value(self, expr: smt.ExprRef, choice_conformity=1.0) -> Any:
@@ -1285,15 +1123,15 @@ class StateSpace:
                     model = self.witness()
                     if model is None:
                         self._raise_unexpected_realization_unsat(expr, None)
-                    value = model.eval(expr, model_completion=True)
-                    if z3.is_real(expr) and is_smt_variable(expr):
+                    value = smt.model_eval(model, expr)
+                    if smt.has_real_sort(expr) and smt.is_uninterpreted_const(expr):
                         # Reals model floats; prefer values that a float can hold.
-                        realized = cast(float, model_value_to_python(value))
-                        float_value = z3.Q(*realized.as_integer_ratio())
-                        if self.witness(expr == float_value) is not None:
+                        realized = cast(float, smt.to_python(value))
+                        float_value = smt.real_val(str(Fraction(realized)))
+                        if self.witness(smt.eq(expr, float_value)) is not None:
                             value = float_value
                     forced_path, pos_model, neg_model = self._fork_witnesses(
-                        expr == value
+                        smt.eq(expr, value)
                     )
                     self._search_position = self.grow_into(
                         ModelValueNode(self._random, expr, value, forced_path)
@@ -1314,16 +1152,14 @@ class StateSpace:
                 )
                 self.choices_made.append(node)
                 self._search_position = next_node
-                constraint = (
-                    expr == node.condition_value
-                    if chosen
-                    else expr != node.condition_value
-                )
+                constraint = smt.eq(expr, node.condition_value)
+                if not chosen:
+                    constraint = smt.not_(constraint)
                 self._assert(constraint, pos_model if chosen else neg_model)
                 if self.is_detached and self.witness() is None:
                     self._raise_unexpected_realization_unsat(expr, constraint)
                 if chosen:
-                    ret = model_value_to_python(node.condition_value)
+                    ret = smt.to_python(node.condition_value)
                     if (
                         in_debug()
                         and not self.is_detached
@@ -1460,10 +1296,10 @@ class StateSpace:
         self.execution_deadline += constant_factor
         if self.smt_timeout is not None and smt_multiple is not None:
             self.smt_timeout = int(self.smt_timeout * smt_multiple)
-            self.solver.set(timeout=self.smt_timeout)
+            self.solver.set_timeout(self.smt_timeout)
         if self.smt_rlimit is not None and smt_multiple is not None:
             self.smt_rlimit = int(self.smt_rlimit * smt_multiple)
-            self.solver.set("rlimit", self.smt_rlimit)
+            self.solver.set_rlimit(self.smt_rlimit)
 
     @overload
     def detach_path(self, exc: None = None) -> None: ...

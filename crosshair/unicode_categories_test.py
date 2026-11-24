@@ -4,7 +4,6 @@ from unicodedata import unidata_version
 import z3
 
 from crosshair import smt
-from crosshair.statespace import make_default_solver
 from crosshair.unicode_categories import (
     CharMask,
     IntTransform,
@@ -59,8 +58,8 @@ def test_int_transform_matches_casemaps():
 
 def test_int_transform_offsets_are_decidable():
     codepoint = smt.const("codepoint", smt.int_sort)
-    solver = make_default_solver()
-    solver.add(0 <= codepoint, codepoint <= maxunicode)
-    solver.add(smt_lower_changes(codepoint))
-    solver.add(smt_lower_1st(codepoint) == codepoint)
-    assert solver.check() == z3.unsat
+    solver = smt.Solver()
+    solver.assert_(0 <= codepoint, codepoint <= maxunicode)
+    solver.assert_(smt_lower_changes(codepoint))
+    solver.assert_(smt_lower_1st(codepoint) == codepoint)
+    assert not solver.is_sat()

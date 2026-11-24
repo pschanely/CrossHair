@@ -4,7 +4,6 @@ import sys
 from typing import Dict, List, Optional, Type
 
 from crosshair import smt
-from crosshair.statespace import VersionedSolver
 from crosshair.tracers import NoTracing
 from crosshair.util import CrossHairInternal, CrossHairValue, is_hashable
 
@@ -106,7 +105,7 @@ SMT_SUBTYPE_FN = smt.declare_fun(
 class SymbolicTypeRepository:
     pytype_to_smt: Dict[Type, smt.ExprRef]
 
-    def __init__(self, solver: VersionedSolver):
+    def __init__(self, solver: smt.Solver):
         self.pytype_to_smt = {}
         self.solver = solver
 
@@ -143,6 +142,6 @@ class SymbolicTypeRepository:
             stmts.append(
                 smt.eq(smt.apply(SMT_SUBTYPE_FN, expr, expr), _pyissubclass(typ, typ))
             )
-            self.solver.add(stmts)
+            self.solver.assert_(*stmts)
             pytype_to_smt[typ] = expr
         return pytype_to_smt[typ]
