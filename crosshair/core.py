@@ -1935,7 +1935,7 @@ def attempt_call(
         )
 
     def refutation(
-        analysis: CallAnalysis,
+        analysis: CallAnalysis, exc: Optional[BaseException]
     ) -> Tuple[CallAnalysis, Optional[ConcreteRefutation]]:
         if (
             concrete_args is None
@@ -2000,7 +2000,8 @@ def attempt_call(
                         "".join(tb_desc),
                     )
                 ],
-            )
+            ),
+            exc,
         )
     elif kind == CallOutcomeKind.ARGS_UNCOPIED:
         detail = (
@@ -2023,7 +2024,7 @@ def attempt_call(
                 f"(does {typename} define __eq__?). "
                 f'Define __eq__, or list "{argname}" in post[...].'
             )
-        return refutation(_contract_error(msg_gen, post_condition, detail))
+        return refutation(_contract_error(msg_gen, post_condition, detail), exc)
     elif kind == CallOutcomeKind.OLD_UNAVAILABLE:
         detail = (
             f"Cannot read __old__: {snapshot.describe_failures()}. "
@@ -2045,7 +2046,7 @@ def attempt_call(
                 "".join(tb.format()),
             )
         ]
-        return refutation(CallAnalysis(VerificationStatus.REFUTED, failures))
+        return refutation(CallAnalysis(VerificationStatus.REFUTED, failures), exc)
     else:
         assert kind == CallOutcomeKind.POST_FAIL
         detail = "false " + counterexample(__return__, snapshot.counterexample_note())
@@ -2059,7 +2060,7 @@ def attempt_call(
                 "",
             )
         ]
-        return refutation(CallAnalysis(VerificationStatus.REFUTED, failures))
+        return refutation(CallAnalysis(VerificationStatus.REFUTED, failures), exc)
 
 
 def replay_refutation(
