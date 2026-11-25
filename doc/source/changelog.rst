@@ -6,6 +6,16 @@ Changelog
 Next Version
 ---------------
 
+ * Results are now checked by running them with concrete values before
+   they're reported. Symbolic floats are modeled with real number arithmetic,
+   which previously could produce counterexamples that don't actually fail.
+   ``crosshair check`` and ``crosshair watch`` keep searching when a
+   counterexample does not reproduce. ``crosshair search`` and
+   ``crosshair diffbehavior`` skip results that do not reproduce, and
+   ``crosshair cover`` takes return values, exceptions, and coverage from
+   concrete runs.
+ * Fixed ``crosshair check`` sometimes confirming a condition even though some
+   paths were checked only with approximate (real number) float semantics.
  * Faster solving for integer true division (``int / int``) under the
    IEEE float representation. The overflow check is now a linear integer
    comparison instead of a float conversion.

@@ -150,7 +150,10 @@ CrossHair will remember what decisions it has made so that
 it can make different decisions on future executions. Ultimately,
 we're looking for some target thing to happen: an exception to be
 raised, or a postcondition to return False. When that happens,
-we ask Z3 for a model and report it as a counterexample.
+we ask Z3 for a model and turn it into a counterexample.
+Some values (notably floats) are modeled only approximately, so CrossHair
+then calls the function again with these concrete values, and only reports
+the counterexample if it reproduces.
 
 That's the core of how CrossHair works.
 
