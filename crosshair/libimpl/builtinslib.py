@@ -449,11 +449,9 @@ class ModelingDirector:
             else:
                 space = context_statespace()
                 for option, probability in ch_types[:-1]:
-                    # NOTE: fork_parallel() is closer to what we want than smt_fork();
-                    # however, exhausting an incomplete representation path
-                    # (e.g. RealBasedSymbolicFloat) should not exhaust the branch.
-                    if space.smt_fork(
-                        desc=f"use_{option.__name__}", probability_true=probability
+                    if space.fork_parallel(
+                        false_probability=1.0 - probability,
+                        desc=f"use_{option.__name__}",
                     ):
                         representation_type = option
                         break
@@ -1922,7 +1920,7 @@ class RealBasedSymbolicFloat(SymbolicFloat):
         assert typ is float, (
             f"RealBasedSymbolicFloat with unexpected python type ({type(typ)})"
         )
-        context_statespace().cap_result_at_unknown()
+        context_statespace().mark_approximate()
         SymbolicValue.__init__(self, smtvar, typ)
 
     @classmethod
