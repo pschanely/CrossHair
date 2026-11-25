@@ -5,3 +5,6 @@ updates:
   schedule:
     interval: daily
   versioning-strategy: increase-if-necessary
+  ignore:
+    - dependency-name: "z3-solver"
+      versions: ["5.3.3.0"]
