@@ -1697,17 +1697,45 @@ def _copy_compares_equal(value: object) -> bool:
         return False
 
 
-def attempt_call(
+class CallOutcomeKind(enum.Enum):
+    PRE_FAIL = "precondition is false"
+    PRE_ERR = "precondition raised"
+    IGNORED = "ignored"
+    EXPECTED_RAISE = "raised an expected exception"
+    EXEC_ERR = "function raised"
+    ARGS_UNCOPIED = "arguments could not be copied"
+    ARG_CHANGED = "argument changed"
+    OLD_UNAVAILABLE = "__old__ could not be copied"
+    POST_ERR = "postcondition raised"
+    POST_FAIL = "postcondition is false"
+    POST_OK = "postcondition is true"
+
+
+@dataclass
+class CallOutcome:
+    kind: CallOutcomeKind
+    snapshot: ArgumentSnapshot
+    precondition: Optional[ConditionExpr] = None
+    exc: Optional[BaseException] = None
+    exc_stack: Optional[StackSummary] = None
+    return_value: object = None
+    changed_argname: Optional[str] = None
+
+
+def check_call(
     conditions: Conditions,
+    original_args: BoundArguments,
     short_circuit: ShortCircuitingContext,
     enforced_conditions: EnforcedConditions,
-) -> CallAnalysis:
+) -> CallOutcome:
+    """
+    Call a copy of the given arguments and check the function's contract.
+
+    Exceptions are captured in the outcome; values in it are not realized.
+    """
     assert not is_tracing()
     fn = conditions.fn
-    space = context_statespace()
-    msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement():
-        original_args = gen_args(conditions.sig)
         snapshot = ArgumentSnapshot(original_args.arguments)
     bound_args = BoundArguments(conditions.sig, snapshot.copies)  # type: ignore
 
@@ -1717,6 +1745,18 @@ def attempt_call(
     # demonstrate immutability.
     lcls = {"__old__": AttributeHolder(lcls), **lcls}
     expected_exceptions = conditions.raises
+
+    def filtered(
+        efilter: ExceptionFilter, kind: CallOutcomeKind, **kw: Any
+    ) -> CallOutcome:
+        if efilter.ignore:
+            if efilter.analysis.verification_status == VerificationStatus.CONFIRMED:
+                return CallOutcome(CallOutcomeKind.EXPECTED_RAISE, snapshot)
+            return CallOutcome(CallOutcomeKind.IGNORED, snapshot)
+        assert efilter.user_exc is not None
+        exc, exc_stack = efilter.user_exc
+        return CallOutcome(kind, snapshot, exc=exc, exc_stack=exc_stack, **kw)
+
     for precondition in conditions.pre:
         if not precondition.evaluate:
             continue
@@ -1727,26 +1767,12 @@ def attempt_call(
                 precondition_ok = realize(prefer_true(precondition_ok))
             if not precondition_ok:
                 debug("Failed to meet precondition", precondition.expr_source)
-                return CallAnalysis(failing_precondition=precondition)
-        if efilter.ignore:
-            debug("Ignored exception in precondition.", efilter.analysis)
-            return efilter.analysis
-        elif efilter.user_exc is not None:
-            user_exc, tb = efilter.user_exc
-            with ResumedTracing():
-                user_exc = space.detach_path(user_exc)
-            formatted_tb = tb.format()
-            debug(
-                "Exception attempting to meet precondition",
-                precondition.expr_source,
-                ":",
-                user_exc,
-                formatted_tb,
-            )
-            return CallAnalysis(
-                failing_precondition=precondition,
-                failing_precondition_reason=f'it raised "{repr(user_exc)} at {formatted_tb[-1]}"',
-            )
+                return CallOutcome(
+                    CallOutcomeKind.PRE_FAIL, snapshot, precondition=precondition
+                )
+        if efilter.ignore or efilter.user_exc is not None:
+            debug("Exception in precondition", precondition.expr_source)
+            return filtered(efilter, CallOutcomeKind.PRE_ERR, precondition=precondition)
 
     with ExceptionFilter(expected_exceptions) as efilter:
         unenforced_fn = NoEnforce(fn)
@@ -1766,17 +1792,109 @@ def attempt_call(
             "__old__": old_args,
             fn.__name__: fn,
         }
+    if efilter.ignore or efilter.user_exc is not None:
+        debug("Exception in function body.")
+        return filtered(efilter, CallOutcomeKind.EXEC_ERR)
 
-    if efilter.ignore:
-        debug("Ignored exception in function.", efilter.analysis)
-        return efilter.analysis
-    elif efilter.user_exc is not None:
-        e, tb = efilter.user_exc
+    (post_condition,) = conditions.post
+    assert post_condition.evaluate is not None
+    if conditions.mutable_args is not None:
+        checked_args = [
+            name for name in bound_args.arguments if name not in conditions.mutable_args
+        ]
+        if checked_args and snapshot.failures():
+            return CallOutcome(
+                CallOutcomeKind.ARGS_UNCOPIED, snapshot, return_value=__return__
+            )
+        for argname in checked_args:
+            old_val = original_args.arguments[argname]
+            new_val = bound_args.arguments[argname]
+            with ResumedTracing():
+                try:
+                    unchanged = old_val is new_val or bool(old_val == new_val)
+                except Exception:
+                    unchanged = False
+            if not unchanged:
+                return CallOutcome(
+                    CallOutcomeKind.ARG_CHANGED,
+                    snapshot,
+                    return_value=__return__,
+                    changed_argname=argname,
+                )
+
+    old_unavailable = False
+    with ExceptionFilter(expected_exceptions) as efilter:
+        # TODO: re-enable post-condition short circuiting. This will require refactoring how
+        # enforced conditions and short curcuiting interact, so that post-conditions are
+        # selectively run when, and only when, performing a short circuit.
+        # with enforced_conditions.enabled_enforcement(), short_circuit:
+        debug("Starting postcondition")
+        with ResumedTracing():
+            try:
+                isok = bool(post_condition.evaluate(lcls))
+            except _OldUnavailable:
+                old_unavailable = True
+    if old_unavailable:
+        return CallOutcome(
+            CallOutcomeKind.OLD_UNAVAILABLE, snapshot, return_value=__return__
+        )
+    if efilter.ignore or efilter.user_exc is not None:
+        debug("Exception in postcondition.")
+        return filtered(efilter, CallOutcomeKind.POST_ERR, return_value=__return__)
+    kind = CallOutcomeKind.POST_OK if isok else CallOutcomeKind.POST_FAIL
+    return CallOutcome(kind, snapshot, return_value=__return__)
+
+
+def attempt_call(
+    conditions: Conditions,
+    short_circuit: ShortCircuitingContext,
+    enforced_conditions: EnforcedConditions,
+) -> CallAnalysis:
+    assert not is_tracing()
+    space = context_statespace()
+    msg_gen = MessageGenerator(conditions.src_fn)
+    with enforced_conditions.enabled_enforcement():
+        original_args = gen_args(conditions.sig)
+    outcome = check_call(conditions, original_args, short_circuit, enforced_conditions)
+    kind = outcome.kind
+    snapshot = outcome.snapshot
+    __return__ = outcome.return_value
+    (post_condition,) = conditions.post
+
+    if kind == CallOutcomeKind.POST_OK:
+        debug("Postcondition confirmed.")
+        return CallAnalysis(VerificationStatus.CONFIRMED)
+    elif kind == CallOutcomeKind.IGNORED:
+        return CallAnalysis()
+    elif kind == CallOutcomeKind.EXPECTED_RAISE:
+        return CallAnalysis(VerificationStatus.CONFIRMED)
+    elif kind == CallOutcomeKind.PRE_FAIL:
+        return CallAnalysis(failing_precondition=outcome.precondition)
+
+    exc, tb = outcome.exc, outcome.exc_stack
+    with ResumedTracing():
+        exc = space.detach_path(exc)
+
+    if kind == CallOutcomeKind.PRE_ERR:
+        assert tb is not None
+        formatted_tb = tb.format()
+        assert outcome.precondition is not None
+        debug(
+            "Exception attempting to meet precondition",
+            outcome.precondition.expr_source,
+            ":",
+            exc,
+            formatted_tb,
+        )
+        return CallAnalysis(
+            failing_precondition=outcome.precondition,
+            failing_precondition_reason=f'it raised "{repr(exc)} at {formatted_tb[-1]}"',
+        )
+    elif kind == CallOutcomeKind.EXEC_ERR:
+        assert exc is not None and tb is not None
         tb_desc = tb.format()
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
-        with ResumedTracing():
-            e = space.detach_path(e)
-        detail = name_of_type(type(e)) + ": " + str(e)
+        detail = name_of_type(type(exc)) + ": " + str(exc)
         detail += " " + make_counterexample_message(
             conditions, original_args, copy_note=snapshot.counterexample_note()
         )
@@ -1794,76 +1912,39 @@ def attempt_call(
                 )
             ],
         )
-
-    (post_condition,) = conditions.post
-    assert post_condition.evaluate is not None
-    if conditions.mutable_args is not None:
-        checked_args = [
-            name for name in bound_args.arguments if name not in conditions.mutable_args
-        ]
-        if checked_args and snapshot.failures():
-            with ResumedTracing():
-                space.detach_path()
-            detail = (
-                "Cannot check that arguments are unchanged: "
-                f"{snapshot.describe_failures()}. "
-                "Define __deepcopy__, or list every argument in post[...]."
+    elif kind == CallOutcomeKind.ARGS_UNCOPIED:
+        detail = (
+            "Cannot check that arguments are unchanged: "
+            f"{snapshot.describe_failures()}. "
+            "Define __deepcopy__, or list every argument in post[...]."
+        )
+        return _contract_error(msg_gen, post_condition, detail)
+    elif kind == CallOutcomeKind.ARG_CHANGED:
+        argname = outcome.changed_argname
+        assert argname is not None
+        old_val = original_args.arguments[argname]
+        if _copy_compares_equal(old_val):
+            detail = f'Argument "{argname}" changed ' + make_counterexample_message(
+                conditions, original_args, __return__
             )
-            return _contract_error(msg_gen, post_condition, detail)
-        for argname in checked_args:
-            old_val = original_args.arguments[argname]
-            new_val = bound_args.arguments[argname]
-            with ResumedTracing():
-                try:
-                    unchanged = old_val is new_val or bool(old_val == new_val)
-                except Exception:
-                    unchanged = False
-            if unchanged:
-                continue
-            with ResumedTracing():
-                space.detach_path()
-            if _copy_compares_equal(old_val):
-                detail = f'Argument "{argname}" changed ' + make_counterexample_message(
-                    conditions, original_args, __return__
-                )
-            else:
-                typename = name_of_type(type(deep_realize(old_val)))
-                detail = (
-                    f'Cannot check that argument "{argname}" is unchanged: '
-                    "a copy of it does not compare equal to the original "
-                    f"(does {typename} define __eq__?). "
-                    f'Define __eq__, or list "{argname}" in post[...].'
-                )
-            return _contract_error(msg_gen, post_condition, detail)
-
-    old_unavailable = False
-    with ExceptionFilter(expected_exceptions) as efilter:
-        # TODO: re-enable post-condition short circuiting. This will require refactoring how
-        # enforced conditions and short curcuiting interact, so that post-conditions are
-        # selectively run when, and only when, performing a short circuit.
-        # with enforced_conditions.enabled_enforcement(), short_circuit:
-        debug("Starting postcondition")
-        with ResumedTracing():
-            try:
-                isok = bool(post_condition.evaluate(lcls))
-            except _OldUnavailable:
-                old_unavailable = True
-    if old_unavailable:
-        with ResumedTracing():
-            space.detach_path()
+        else:
+            typename = name_of_type(type(deep_realize(old_val)))
+            detail = (
+                f'Cannot check that argument "{argname}" is unchanged: '
+                "a copy of it does not compare equal to the original "
+                f"(does {typename} define __eq__?). "
+                f'Define __eq__, or list "{argname}" in post[...].'
+            )
+        return _contract_error(msg_gen, post_condition, detail)
+    elif kind == CallOutcomeKind.OLD_UNAVAILABLE:
         detail = (
             f"Cannot read __old__: {snapshot.describe_failures()}. "
             "Define __deepcopy__, or avoid __old__."
         )
         return _contract_error(msg_gen, post_condition, detail)
-    if efilter.ignore:
-        debug("Ignored exception in postcondition.", efilter.analysis)
-        return efilter.analysis
-    elif efilter.user_exc is not None:
-        e, tb = efilter.user_exc
-        with ResumedTracing():
-            e = space.detach_path(e)
-        detail = name_of_type(type(e)) + ": " + str(e)
+    elif kind == CallOutcomeKind.POST_ERR:
+        assert exc is not None and tb is not None
+        detail = name_of_type(type(exc)) + ": " + str(exc)
         detail += " " + make_counterexample_message(
             conditions, original_args, __return__, snapshot.counterexample_note()
         )
@@ -1879,12 +1960,8 @@ def attempt_call(
             )
         ]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
-    if isok:
-        debug("Postcondition confirmed.")
-        return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
-        with ResumedTracing():
-            space.detach_path()
+        assert kind == CallOutcomeKind.POST_FAIL
         detail = "false " + make_counterexample_message(
             conditions, original_args, __return__, snapshot.counterexample_note()
         )
