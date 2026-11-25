@@ -41,7 +41,6 @@ from typing import (
 from unittest.mock import patch
 
 import pytest
-import z3  # type: ignore
 
 from crosshair import smt, type_repo
 from crosshair.behavior_compare import compare_returns, summarize_execution
@@ -394,16 +393,16 @@ def test_int___pow___nonpositive_exponent():
         with NoTracing():
             base = SymbolicInt("base")
             exp = SymbolicInt("exp")
-            space.add(base.var == 3)
-            space.add(exp.var == -2)
+            space.add(smt.eq(base.var, smt.int_val(3)))
+            space.add(smt.eq(exp.var, smt.int_val(-2)))
         assert deep_realize(base**exp) == 3**-2  # a float, not 0
         assert deep_realize(base**-2) == 3**-2  # concrete exponent
     with standalone_statespace as space:
         with NoTracing():
             base = SymbolicInt("base")
             exp = SymbolicInt("exp")
-            space.add(base.var == 0)
-            space.add(exp.var == 0)
+            space.add(smt.eq(base.var, smt.int_val(0)))
+            space.add(smt.eq(exp.var, smt.int_val(0)))
         assert deep_realize(base**exp) == 1  # 0**0 == 1, not 0
 
 
@@ -415,8 +414,8 @@ def test_int___pow___zero_exponent_keeps_base_symbolic():
         with NoTracing():
             assert result == 1
             # x ** 0 is 1 for every x, so the base need not be realized.
-            assert space.is_possible(base.var == 5)
-            assert space.is_possible(base.var == 7)
+            assert space.is_possible(smt.eq(base.var, smt.int_val(5)))
+            assert space.is_possible(smt.eq(base.var, smt.int_val(7)))
 
 
 def test_int___pow___large_exponent_realizes():
@@ -426,8 +425,8 @@ def test_int___pow___large_exponent_realizes():
         with NoTracing():
             base = SymbolicInt("base")
             exp = SymbolicInt("exp")
-            space.add(base.var == 392)
-            space.add(exp.var == 215)
+            space.add(smt.eq(base.var, smt.int_val(392)))
+            space.add(smt.eq(exp.var, smt.int_val(215)))
         assert deep_realize(base**exp) == 392**215
 
 
@@ -436,8 +435,8 @@ def test_int___pow___astronomical_exponent_is_unsupported():
         with NoTracing():
             base = SymbolicInt("base")
             exp = SymbolicInt("exp")
-            space.add(base.var == 2)
-            space.add(exp.var == 5_000_000)
+            space.add(smt.eq(base.var, smt.int_val(2)))
+            space.add(smt.eq(exp.var, smt.int_val(5_000_000)))
         with pytest.raises(CrosshairUnsupported):
             deep_realize(base**exp)
 
@@ -479,7 +478,7 @@ def test_ieee_int_to_float_overflow_boundary(space, value, overflows):
         PreciseIeeeSymbolicFloat
     )
     x = SymbolicInt("x")
-    space.add(x.var == value)
+    space.add(smt.eq(x.var, smt.int_val(value)))
     with ResumedTracing():
         if overflows:
             with pytest.raises(OverflowError, match="int too large to convert"):
@@ -506,9 +505,9 @@ def test_ieee_int_float_comparisons_are_exact(space, int_value, float_value, op)
     )
     symbolic_int = SymbolicInt("symbolic_int")
     symbolic_float = PreciseIeeeSymbolicFloat(
-        z3.FPVal(float_value, PreciseIeeeSymbolicFloat._ch_smt_sort())
+        smt.fp_val(float_value, PreciseIeeeSymbolicFloat._ch_smt_sort())
     )
-    space.add(symbolic_int.var == int_value)
+    space.add(smt.eq(symbolic_int.var, smt.int_val(int_value)))
     with ResumedTracing():
         assert bool(op(symbolic_int, symbolic_float)) is op(int_value, float_value)
         assert bool(op(symbolic_int, float_value)) is op(int_value, float_value)
@@ -522,7 +521,7 @@ def test_ieee_huge_int_pow_raises_overflow(space):
         PreciseIeeeSymbolicFloat
     )
     exponent = SymbolicInt("exponent")
-    space.add(exponent.var == 1 << 1100)
+    space.add(smt.eq(exponent.var, smt.int_val(1 << 1100)))
     with (
         ResumedTracing(),
         pytest.raises(OverflowError, match="int too large to convert"),
@@ -562,10 +561,10 @@ def test_ieee_int_truediv_converts_result(space, numerator, denominator):
 
 def test_ieee_smt_comparisons():
     def is_true(expr):
-        return z3.is_true(z3.simplify(expr))
+        return not smt.Solver().is_sat(smt.not_(expr))
 
     def is_false(expr):
-        return z3.is_false(z3.simplify(expr))
+        return not smt.Solver().is_sat(expr)
 
     smt_ops = PreciseIeeeSymbolicFloat._smt_binops
     sort = PreciseIeeeSymbolicFloat._ch_smt_sort()
@@ -1147,8 +1146,8 @@ def test_float___pow___integral_exponent_stays_symbolic(space):
     with ResumedTracing():
         result = x**2.0
     assert isinstance(result, RealBasedSymbolicFloat)
-    assert space.is_possible(result.var == 9)
-    assert space.is_possible(result.var == 16)
+    assert space.is_possible(smt.eq(result.var, smt.real_val(9)))
+    assert space.is_possible(smt.eq(result.var, smt.real_val(16)))
 
 
 @pytest.mark.parametrize(
@@ -1185,12 +1184,12 @@ def test_float_floordiv_and_divmod_return_float(space, float_type):
 def _pin_symbolic_to(space, name, val):
     if isinstance(val, bool):
         symbolic = SymbolicBool(name)
-        space.add(symbolic.var == val)
+        space.add(smt.eq(symbolic.var, smt.bool_val(val)))
         return symbolic
     symbolic_type = SymbolicInt if isinstance(val, int) else PreciseIeeeSymbolicFloat
     symbolic = symbolic_type(name)
-    # z3's `==` is structural on floats, so this pins the sign of zero and NaN.
-    space.add(symbolic.var == symbolic_type._smt_promote_literal(val))
+    # SMT `=` is structural on floats, so this pins the sign of zero and NaN.
+    space.add(smt.eq(symbolic.var, symbolic_type._smt_promote_literal(val)))
     return symbolic
 
 
@@ -1251,14 +1250,14 @@ def test_class_format():
     with standalone_statespace as space:
         with NoTracing():
             t = SymbolicType("t", Type[int])
-            space.add(t.var == SymbolicType._coerce_to_smt_sort(int))
+            space.add(smt.eq(t.var, SymbolicType._coerce_to_smt_sort(int)))
         assert "a{}b".format(t) == "a<class 'int'>b"
 
 
 def test_smt_for_unification(space):
     sym = LazyIntSymbolicStr("sym")
     with ResumedTracing():
-        space.add(len(sym).var == 2)
+        space.add(smt.eq(len(sym).var, smt.int_val(2)))
         space.add(ord(sym[0]) == ord("a"))
         space.add(ord(sym[1]) == ord("b"))
     assert space.is_possible(SymbolicBool(sym._smt_for_unification("ab")))
@@ -2331,7 +2330,7 @@ def test_object_deep_realize():
 def test_seq_string_deep_realize():
     with standalone_statespace as space, NoTracing():
         tupl = SymbolicArrayBasedUniformTuple("s", List[str])
-        space.add(tupl._len() == 2)
+        space.add(smt.eq(tupl._len(), smt.int_val(2)))
         realized = deep_realize(tupl)
     assert list(map(type, realized)) == [str, str]
 
@@ -4873,7 +4872,7 @@ def test_float_is_integer_nonfinite(space, val):
         PreciseIeeeSymbolicFloat
     )
     x = PreciseIeeeSymbolicFloat("x")
-    space.add(x.var == smt.fp_val(val, smt.sort_of(x.var)))
+    space.add(smt.eq(x.var, smt.fp_val(val, smt.sort_of(x.var))))
     with ResumedTracing():
         assert not x.is_integer()
 

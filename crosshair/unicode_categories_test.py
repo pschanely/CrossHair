@@ -1,8 +1,6 @@
 from sys import maxunicode
 from unicodedata import unidata_version
 
-import z3
-
 from crosshair import smt
 from crosshair.unicode_categories import (
     CharMask,
@@ -45,8 +43,12 @@ def test_int_transform_segments():
     mapping = {65: 97, 66: 98, 68: 100, 200: 7, 205: 7, 300: 1}
     transform = IntTransform.from_mapping(mapping)
     assert transform.starts == (65, 200, 300)
+    solver = smt.Solver()
+    assert solver.is_sat()
+    model = solver.model()
     for key, value in mapping.items():
-        assert z3.simplify(transform.smt_apply(smt.int_val(key))).as_long() == value
+        applied = transform.smt_apply(smt.int_val(key))
+        assert smt.to_python(smt.model_eval(model, applied)) == value
 
 
 def test_int_transform_matches_casemaps():
@@ -59,7 +61,9 @@ def test_int_transform_matches_casemaps():
 def test_int_transform_offsets_are_decidable():
     codepoint = smt.const("codepoint", smt.int_sort)
     solver = smt.Solver()
-    solver.assert_(0 <= codepoint, codepoint <= maxunicode)
+    solver.assert_(
+        smt.le(smt.int_val(0), codepoint), smt.le(codepoint, smt.int_val(maxunicode))
+    )
     solver.assert_(smt_lower_changes(codepoint))
-    solver.assert_(smt_lower_1st(codepoint) == codepoint)
+    solver.assert_(smt.eq(smt_lower_1st(codepoint), codepoint))
     assert not solver.is_sat()
