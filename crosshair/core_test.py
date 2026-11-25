@@ -2,6 +2,7 @@ import abc
 import dataclasses
 import importlib
 import inspect
+import math
 import re
 import sys
 import time
@@ -1773,3 +1774,15 @@ def test_callee_precondition_failure_reproduces() -> None:
         return float_callee(x / 10)
 
     check_states(f, MessageType.EXEC_ERR)
+
+
+def test_float_precondition_unmet_by_real_floats() -> None:
+    def f(x: float) -> float:
+        """
+        pre: math.isfinite(x) and x + 1.0 == x
+        post: False
+        """
+        return x
+
+    check_states(f, POST_FAIL)
+

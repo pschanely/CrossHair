@@ -1381,16 +1381,17 @@ class StateSpace:
         """
         Record that this path models some values inexactly.
 
-        A confirmation on this path is bubbled as UNKNOWN.
+        A confirmation, or a path without a verification status, is bubbled as
+        UNKNOWN.
         """
         self.is_approximate = True
 
     def bubble_status(
         self, analysis: CallAnalysis
     ) -> Tuple[Optional[CallAnalysis], bool]:
-        if (
-            self.is_approximate
-            and analysis.verification_status == VerificationStatus.CONFIRMED
+        if self.is_approximate and analysis.verification_status in (
+            None,
+            VerificationStatus.CONFIRMED,
         ):
             analysis = replace(analysis, verification_status=VerificationStatus.UNKNOWN)
         # In some cases, we might ignore an attempt while not at a leaf.
