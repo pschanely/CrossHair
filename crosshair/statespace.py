@@ -211,7 +211,7 @@ else:
 def prefer_true(v: Any) -> bool:
     if not (hasattr(v, "var") and smt.has_bool_sort(v.var)):
         with ResumedTracing():
-            v = v.__bool__()
+            v = v.__bool__() if hasattr(v, "__bool__") else bool(v)
         if not (hasattr(v, "var")):
             return v
     space = context_statespace()

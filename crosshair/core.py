@@ -99,8 +99,10 @@ from crosshair.tracers import (
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import (
     ATOMIC_IMMUTABLE_TYPES,
+    CROSSHAIR_EXTRA_ASSERTS,
     UNABLE_TO_REPR_TEXT,
     AttributeHolder,
+    ControlFlowException,
     CrossHairInternal,
     CrosshairUnsupported,
     CrossHairValue,
@@ -1157,6 +1159,9 @@ class FunctionInterps:
     def append_return(self, callable: Callable, retval: object) -> None:
         self._interpretations[callable].append(retval)
 
+    def has_interpretations(self) -> bool:
+        return bool(self._interpretations)
+
     def patch_string(self) -> Optional[str]:
         if self._interpretations:
             patches = ",".join(
@@ -1336,7 +1341,9 @@ def analyze_calltree(
         nonlocal num_confirmed_paths
         try:
             # The real work happens here!:
-            call_analysis = attempt_call(conditions, short_circuit, enforced_conditions)
+            call_analysis, refutation = attempt_call(
+                conditions, short_circuit, enforced_conditions
+            )
         except NotDeterministic:
             # TODO: Improve nondeterminism helpfulness
             tb = extract_tb(sys.exc_info()[2])
@@ -1354,7 +1361,8 @@ def analyze_calltree(
                             traceback.format_exc(),
                         )
                     ],
-                )
+                ),
+                breakout=True,
             )
         if failing_precondition is not None:
             cur_precondition = call_analysis.failing_precondition
@@ -1370,14 +1378,32 @@ def analyze_calltree(
             elif cur_precondition.line > failing_precondition.line:
                 failing_precondition = cur_precondition
                 failing_precondition_reason = call_analysis.failing_precondition_reason
-        if call_analysis.verification_status == VerificationStatus.CONFIRMED:
+        status = call_analysis.verification_status
+        if status == VerificationStatus.CONFIRMED:
             num_confirmed_paths += 1
+        elif status == VerificationStatus.REFUTED:
+            if refutation is None:
+                return PathOutcome(call_analysis, breakout=True)
+            return PathOutcome(
+                CallAnalysis(VerificationStatus.UNKNOWN),
+                candidate=(call_analysis, refutation),
+            )
         return PathOutcome(call_analysis)
 
-    # TODO clean up how enforced conditions works here?
-    exploration = explore_loop(options, search_root, run_path, stop_on_refutation=True)
+    def verify(candidate: Tuple[CallAnalysis, ConcreteRefutation]) -> bool:
+        _, refutation = candidate
+        return replay_refutation(
+            conditions, refutation, options, short_circuit, enforced_conditions
+        )
+
+    exploration = explore_loop(options, search_root, run_path, verify)
     space_exhausted = exploration.exhausted
-    top_analysis = search_root.child.get_result()
+    if exploration.verified_candidate is not None:
+        top_analysis, _ = cast(
+            Tuple[CallAnalysis, ConcreteRefutation], exploration.verified_candidate
+        )
+    else:
+        top_analysis = search_root.child.get_result()
     if top_analysis.messages:
         all_messages.extend(
             replace(
@@ -1443,11 +1469,13 @@ class PathOutcome:
     The result of exploring one path.
 
     `analysis` is bubbled into the search tree; `breakout` requests that the
-    exploration stop after this path.
+    exploration stop after this path. A `candidate` also stops the exploration,
+    and is given to the exploration's `verify` callback.
     """
 
     analysis: CallAnalysis
     breakout: bool = False
+    candidate: object = None
 
 
 @dataclass
@@ -1455,13 +1483,14 @@ class ExplorationResult:
     top_analysis: Optional[CallAnalysis]
     exhausted: bool
     iterations: int
+    verified_candidate: object = None
 
 
 def explore_loop(
     options: AnalysisOptions,
     search_root: RootNode,
     run_path: Callable[[StateSpace], PathOutcome],
-    stop_on_refutation: bool = False,
+    verify: Callable[[Any], bool] = lambda candidate: True,
 ) -> ExplorationResult:
     """
     The shared per-path exploration loop.
@@ -1470,70 +1499,79 @@ def explore_loop(
     CallAnalysis to bubble into the search tree (and may request an early stop).
     Classifies the control-flow exceptions (`IgnoreAttempt`, `UnexploredPath`)
     uniformly; anything else (including `NotDeterministic`) is `run_path`'s to
-    handle. Stops on caller breakout, a refutation (when `stop_on_refutation`),
-    path exhaustion, the per-condition timeout, the iteration cap, or too many
-    uninteresting iterations.
+    handle. Stops on caller breakout, a candidate that `verify` accepts, path
+    exhaustion, the per-condition timeout, the iteration cap, or too many
+    uninteresting iterations. `verify` runs outside of any StateSpace and
+    without symbolic patches.
     """
     condition_start = process_time()
     max_uninteresting_iterations = options.get_max_uninteresting_iterations()
     top_analysis: Optional[CallAnalysis] = None
     exhausted = False
     i = 0
-    with Patched():
-        for i in range(1, options.max_iterations + 1):
-            debug("Iteration ", i)
-            itr_start = process_time()
-            if itr_start > condition_start + options.per_condition_timeout:
-                debug(
-                    "Stopping due to --per_condition_timeout=",
-                    options.per_condition_timeout,
-                )
-                break
-            options.incr("num_paths")
-            per_path_timeout = options.get_per_path_timeout()
-            space = StateSpace(
-                execution_deadline=itr_start + per_path_timeout,
-                model_check_timeout=per_path_timeout / 2,
-                search_root=search_root,
-            )
-            with (
-                condition_parser(options.analysis_kind),
-                COMPOSITE_TRACER,
-                NoTracing(),
-                StateSpaceContext(space),
-            ):
-                try:
-                    outcome = run_path(space)
-                except IgnoreAttempt:
-                    outcome = PathOutcome(CallAnalysis())
-                except UnexploredPath:
-                    outcome = PathOutcome(CallAnalysis(VerificationStatus.UNKNOWN))
-                debug("Verification status:", outcome.analysis.verification_status)
-                top_analysis, exhausted = space.bubble_status(outcome.analysis)
-                debug("Path tree stats", search_root.stats())
-                overall_status = (
-                    top_analysis.verification_status if top_analysis else None
-                )
-                if outcome.breakout:
-                    break
-                if stop_on_refutation and overall_status == VerificationStatus.REFUTED:
-                    break
-                if exhausted:
-                    options.incr("exhaustion")
-                    debug("Stopping due to path exhaustion")
-                    break
-                if max_uninteresting_iterations != sys.maxsize:
-                    iters_since_discovery = getattr(
-                        search_root.pathing_oracle, "iters_since_discovery"
+    while True:
+        candidate = None
+        with Patched():
+            while i < options.max_iterations:
+                i += 1
+                debug("Iteration ", i)
+                itr_start = process_time()
+                if itr_start > condition_start + options.per_condition_timeout:
+                    debug(
+                        "Stopping due to --per_condition_timeout=",
+                        options.per_condition_timeout,
                     )
-                    assert isinstance(iters_since_discovery, int)
-                    debug("iters_since_discovery", iters_since_discovery)
-                    if iters_since_discovery > max_uninteresting_iterations:
-                        debug(
-                            "Stopping due to --max_uninteresting_iterations=",
-                            max_uninteresting_iterations,
-                        )
+                    break
+                options.incr("num_paths")
+                per_path_timeout = options.get_per_path_timeout()
+                space = StateSpace(
+                    execution_deadline=itr_start + per_path_timeout,
+                    model_check_timeout=per_path_timeout / 2,
+                    search_root=search_root,
+                )
+                with (
+                    condition_parser(options.analysis_kind),
+                    COMPOSITE_TRACER,
+                    NoTracing(),
+                    StateSpaceContext(space),
+                ):
+                    try:
+                        outcome = run_path(space)
+                    except IgnoreAttempt:
+                        outcome = PathOutcome(CallAnalysis())
+                    except UnexploredPath:
+                        outcome = PathOutcome(CallAnalysis(VerificationStatus.UNKNOWN))
+                    debug("Verification status:", outcome.analysis.verification_status)
+                    top_analysis, exhausted = space.bubble_status(outcome.analysis)
+                    debug("Path tree stats", search_root.stats())
+                    if outcome.breakout:
                         break
+                    if outcome.candidate is not None:
+                        candidate = outcome.candidate
+                        break
+                    if exhausted:
+                        options.incr("exhaustion")
+                        debug("Stopping due to path exhaustion")
+                        break
+                    if max_uninteresting_iterations != sys.maxsize:
+                        iters_since_discovery = getattr(
+                            search_root.pathing_oracle, "iters_since_discovery"
+                        )
+                        assert isinstance(iters_since_discovery, int)
+                        debug("iters_since_discovery", iters_since_discovery)
+                        if iters_since_discovery > max_uninteresting_iterations:
+                            debug(
+                                "Stopping due to --max_uninteresting_iterations=",
+                                max_uninteresting_iterations,
+                            )
+                            break
+        if candidate is None:
+            break
+        if verify(candidate):
+            return ExplorationResult(top_analysis, exhausted, i, candidate)
+        debug("Candidate was not verified; resuming exploration")
+        if exhausted:
+            break
     return ExplorationResult(top_analysis, exhausted, i)
 
 
@@ -1845,11 +1883,31 @@ def check_call(
     return CallOutcome(kind, snapshot, return_value=__return__)
 
 
+@dataclass
+class ConcreteRefutation:
+    """Realized arguments for a refuting call, and how that call failed."""
+
+    args: BoundArguments
+    kind: CallOutcomeKind
+    exc_type: Optional[Type[BaseException]]
+    is_approximate: bool
+
+    def reproduced_by(self, outcome: CallOutcome) -> bool:
+        exc_type = None if outcome.exc is None else type(outcome.exc)
+        return outcome.kind == self.kind and exc_type is self.exc_type
+
+
 def attempt_call(
     conditions: Conditions,
     short_circuit: ShortCircuitingContext,
     enforced_conditions: EnforcedConditions,
-) -> CallAnalysis:
+) -> Tuple[CallAnalysis, Optional[ConcreteRefutation]]:
+    """
+    Check the function's contract on symbolic arguments.
+
+    For a refutation that can be re-checked with concrete values, also returns
+    realized arguments and the expected outcome.
+    """
     assert not is_tracing()
     space = context_statespace()
     msg_gen = MessageGenerator(conditions.src_fn)
@@ -1860,16 +1918,37 @@ def attempt_call(
     snapshot = outcome.snapshot
     __return__ = outcome.return_value
     (post_condition,) = conditions.post
+    concrete_args: Optional[BoundArguments] = None
+
+    def counterexample(return_val: object = None, copy_note: str = "") -> str:
+        nonlocal concrete_args
+        concrete_args = space.extra(LazyCreationRepr).deep_realize(original_args)
+        return make_counterexample_message(
+            conditions, concrete_args, return_val, copy_note
+        )
+
+    def refutation(
+        analysis: CallAnalysis,
+    ) -> Tuple[CallAnalysis, Optional[ConcreteRefutation]]:
+        if (
+            concrete_args is None
+            or snapshot.failures()
+            or space.extra(FunctionInterps).has_interpretations()
+        ):
+            return (analysis, None)
+        exc_type = None if exc is None else type(exc)
+        replay = ConcreteRefutation(concrete_args, kind, exc_type, space.is_approximate)
+        return (analysis, replay)
 
     if kind == CallOutcomeKind.POST_OK:
         debug("Postcondition confirmed.")
-        return CallAnalysis(VerificationStatus.CONFIRMED)
+        return (CallAnalysis(VerificationStatus.CONFIRMED), None)
     elif kind == CallOutcomeKind.IGNORED:
-        return CallAnalysis()
+        return (CallAnalysis(), None)
     elif kind == CallOutcomeKind.EXPECTED_RAISE:
-        return CallAnalysis(VerificationStatus.CONFIRMED)
+        return (CallAnalysis(VerificationStatus.CONFIRMED), None)
     elif kind == CallOutcomeKind.PRE_FAIL:
-        return CallAnalysis(failing_precondition=outcome.precondition)
+        return (CallAnalysis(failing_precondition=outcome.precondition), None)
 
     exc, tb = outcome.exc, outcome.exc_stack
     with ResumedTracing():
@@ -1886,31 +1965,35 @@ def attempt_call(
             exc,
             formatted_tb,
         )
-        return CallAnalysis(
-            failing_precondition=outcome.precondition,
-            failing_precondition_reason=f'it raised "{repr(exc)} at {formatted_tb[-1]}"',
+        reason = f'it raised "{repr(exc)} at {formatted_tb[-1]}"'
+        return (
+            CallAnalysis(
+                failing_precondition=outcome.precondition,
+                failing_precondition_reason=reason,
+            ),
+            None,
         )
     elif kind == CallOutcomeKind.EXEC_ERR:
         assert exc is not None and tb is not None
         tb_desc = tb.format()
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         detail = name_of_type(type(exc)) + ": " + str(exc)
-        detail += " " + make_counterexample_message(
-            conditions, original_args, copy_note=snapshot.counterexample_note()
-        )
+        detail += " " + counterexample(copy_note=snapshot.counterexample_note())
         debug("exception while evaluating function body:", detail)
         debug("exception traceback:", ch_stack(tb))
-        return CallAnalysis(
-            VerificationStatus.REFUTED,
-            [
-                msg_gen.make(
-                    MessageType.EXEC_ERR,
-                    detail,
-                    frame_filename,
-                    frame_lineno,
-                    "".join(tb_desc),
-                )
-            ],
+        return refutation(
+            CallAnalysis(
+                VerificationStatus.REFUTED,
+                [
+                    msg_gen.make(
+                        MessageType.EXEC_ERR,
+                        detail,
+                        frame_filename,
+                        frame_lineno,
+                        "".join(tb_desc),
+                    )
+                ],
+            )
         )
     elif kind == CallOutcomeKind.ARGS_UNCOPIED:
         detail = (
@@ -1918,15 +2001,13 @@ def attempt_call(
             f"{snapshot.describe_failures()}. "
             "Define __deepcopy__, or list every argument in post[...]."
         )
-        return _contract_error(msg_gen, post_condition, detail)
+        return (_contract_error(msg_gen, post_condition, detail), None)
     elif kind == CallOutcomeKind.ARG_CHANGED:
         argname = outcome.changed_argname
         assert argname is not None
         old_val = original_args.arguments[argname]
         if _copy_compares_equal(old_val):
-            detail = f'Argument "{argname}" changed ' + make_counterexample_message(
-                conditions, original_args, __return__
-            )
+            detail = f'Argument "{argname}" changed ' + counterexample(__return__)
         else:
             typename = name_of_type(type(deep_realize(old_val)))
             detail = (
@@ -1935,19 +2016,17 @@ def attempt_call(
                 f"(does {typename} define __eq__?). "
                 f'Define __eq__, or list "{argname}" in post[...].'
             )
-        return _contract_error(msg_gen, post_condition, detail)
+        return refutation(_contract_error(msg_gen, post_condition, detail))
     elif kind == CallOutcomeKind.OLD_UNAVAILABLE:
         detail = (
             f"Cannot read __old__: {snapshot.describe_failures()}. "
             "Define __deepcopy__, or avoid __old__."
         )
-        return _contract_error(msg_gen, post_condition, detail)
+        return (_contract_error(msg_gen, post_condition, detail), None)
     elif kind == CallOutcomeKind.POST_ERR:
         assert exc is not None and tb is not None
         detail = name_of_type(type(exc)) + ": " + str(exc)
-        detail += " " + make_counterexample_message(
-            conditions, original_args, __return__, snapshot.counterexample_note()
-        )
+        detail += " " + counterexample(__return__, snapshot.counterexample_note())
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", ch_stack(tb))
         failures = [
@@ -1959,12 +2038,10 @@ def attempt_call(
                 "".join(tb.format()),
             )
         ]
-        return CallAnalysis(VerificationStatus.REFUTED, failures)
+        return refutation(CallAnalysis(VerificationStatus.REFUTED, failures))
     else:
         assert kind == CallOutcomeKind.POST_FAIL
-        detail = "false " + make_counterexample_message(
-            conditions, original_args, __return__, snapshot.counterexample_note()
-        )
+        detail = "false " + counterexample(__return__, snapshot.counterexample_note())
         debug(detail)
         failures = [
             msg_gen.make(
@@ -1975,7 +2052,39 @@ def attempt_call(
                 "",
             )
         ]
-        return CallAnalysis(VerificationStatus.REFUTED, failures)
+        return refutation(CallAnalysis(VerificationStatus.REFUTED, failures))
+
+
+def replay_refutation(
+    conditions: Conditions,
+    refutation: ConcreteRefutation,
+    options: AnalysisOptions,
+    short_circuit: ShortCircuitingContext,
+    enforced_conditions: EnforcedConditions,
+) -> bool:
+    """
+    Whether a call with the refutation's arguments fails in the same way.
+
+    Runs outside of any StateSpace. Also returns True when the call encounters a
+    symbolic value.
+    """
+    debug("Replaying refutation with concrete arguments")
+    try:
+        with condition_parser(options.analysis_kind), COMPOSITE_TRACER, NoTracing():
+            outcome = check_call(
+                conditions, refutation.args, short_circuit, enforced_conditions
+            )
+    except ControlFlowException as exc:
+        debug("Unable to replay concretely:", type(exc).__name__, exc)
+        return True
+    if refutation.reproduced_by(outcome):
+        debug("Concrete replay reproduced the refutation")
+        return True
+    detail = f"expected {refutation.kind.value}, but {outcome.kind.value}"
+    if CROSSHAIR_EXTRA_ASSERTS and not refutation.is_approximate:
+        raise CrossHairInternal(f"Concrete replay did not reproduce: {detail}")
+    debug("Concrete replay did not reproduce:", detail)
+    return False
 
 
 def _mutability_testing_hash(o: object) -> int:

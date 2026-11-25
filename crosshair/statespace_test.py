@@ -1,4 +1,5 @@
 import copy
+import re
 import time
 
 import pytest
@@ -14,6 +15,7 @@ from crosshair.statespace import (
     StateSpaceContext,
     SymbolicHeap,
     VerificationStatus,
+    prefer_true,
 )
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing
 from crosshair.util import (
@@ -182,3 +184,8 @@ def test_approximate_path_prevents_confirmation() -> None:
     assert num_paths == 2
     assert top is not None
     assert top.verification_status == VerificationStatus.UNKNOWN
+
+
+def test_prefer_true_on_concrete_values_without_bool() -> None:
+    assert prefer_true(re.match("a", "a")) is True
+    assert prefer_true([]) is False
