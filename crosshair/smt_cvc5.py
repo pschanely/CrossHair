@@ -559,8 +559,6 @@ def _free_consts(terms: Iterable[ExprRef], seen: Set[ExprRef]) -> List[ExprRef]:
 def _new_solver(**options: str) -> cvc5.Solver:
     solver = cvc5.Solver(tm)
     solver.setOption("arrays-exp", "true")
-    solver.setOption("nl-cov", "true")
-    solver.setOption("nl-ext", "none")
     solver.setOption("incremental", "true")
     for name, value in options.items():
         solver.setOption(name.replace("_", "-"), value)
