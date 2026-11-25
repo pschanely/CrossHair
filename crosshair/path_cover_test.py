@@ -165,4 +165,4 @@ def test_path_cover_result_without_repr() -> None:
     assert paths
     for path in paths:
         assert path.exc is None
-        assert re.fullmatch(r"<\S+\._NoRepr object at 0x[0-9a-f]+>", path.result)
+        assert re.fullmatch(r"<\S+\._NoRepr object at 0x[0-9A-Fa-f]+>", path.result)
