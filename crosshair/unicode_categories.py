@@ -340,10 +340,12 @@ class IntTransform:
         # Offsets are applied outside the tree; otherwise z3 may misjudge the
         # problem as difference logic and fail to solve it.
         leaves = [
-            smt.int_val(o) if o is not None else smt.int_val(c) - smt_int  # type: ignore
+            smt.int_val(o) if o is not None else smt.sub(smt.int_val(c), smt_int)  # type: ignore
             for o, c in zip(self.offsets, self.constants)
         ]
-        return smt_int + self._smt_segments(smt_int, leaves, 0, len(self.starts))
+        return smt.add(
+            smt_int, self._smt_segments(smt_int, leaves, 0, len(self.starts))
+        )
 
     def _smt_segments(
         self, smt_int: smt.ExprRef, leaves: List[smt.ExprRef], lo: int, hi: int

@@ -3,7 +3,7 @@ from functools import partial
 from inspect import Parameter, Signature
 from typing import Any, Callable, List, Optional, Union
 
-from crosshair import NoTracing, SymbolicFactory, register_type
+from crosshair import NoTracing, ResumedTracing, SymbolicFactory, register_type, smt
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.register_contract import register_contract
 
@@ -76,16 +76,19 @@ def genint(factory: SymbolicFactory, cap: int):
     # TODO: conditionally use SymbolicBoundedInt here and below
     with NoTracing():
         symbolic_int = SymbolicInt(factory.varname + factory.space.uniq(), int)
-        factory.space.add(0 <= symbolic_int.var)
-        factory.space.add(symbolic_int.var < SymbolicInt._coerce_to_smt_sort(cap))
+        factory.space.add(smt.le(smt.int_val(0), symbolic_int.var))
+        factory.space.add(
+            smt.lt(symbolic_int.var, SymbolicInt._coerce_to_smt_sort(cap))
+        )
         return symbolic_int
 
 
 def genfloat(factory: SymbolicFactory):
     with NoTracing():
         symbolic_float: Any = factory(float)
-        factory.space.add(0.0 <= symbolic_float.var)
-        factory.space.add(symbolic_float.var < 1.0)
+        with ResumedTracing():
+            factory.space.add(0.0 <= symbolic_float)
+            factory.space.add(symbolic_float < 1.0)
         return symbolic_float
 
 

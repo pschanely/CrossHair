@@ -21,7 +21,7 @@ def _is_positive(x):
         if isinstance(x, PreciseIeeeSymbolicFloat):
             return SymbolicBool(smt.not_(smt.fp_is_negative(x.var)))
         elif isinstance(x, RealBasedSymbolicFloat):
-            return SymbolicBool(x.var >= 0)
+            return SymbolicBool(smt.ge(x.var, smt.real_val(0)))
         else:
             with ResumedTracing():
                 return x >= 0
@@ -43,7 +43,9 @@ def _copysign(x, y):
         if isinstance(invert, SymbolicBool) and isinstance(
             x, (PreciseIeeeSymbolicFloat, RealBasedSymbolicFloat)
         ):
-            return type(x)(smt.ite(invert.var, -x.var, x.var))
+            with ResumedTracing():
+                negated = -x
+            return type(x)(smt.ite(invert.var, negated.var, x.var))
         with ResumedTracing():
             return -x if invert else x
 

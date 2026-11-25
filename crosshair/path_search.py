@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from inspect import BoundArguments
 from typing import Callable, Optional, Type
 
+from crosshair import smt
 from crosshair.copyext import CopyMode, deepcopyext
 from crosshair.core import ExceptionFilter, LazyCreationRepr, explore_paths
 from crosshair.fnutil import FunctionInfo
@@ -120,11 +121,11 @@ def path_search(
             if smt_score is None:
                 debug("non integer score returned; ignoring.")
                 return False
-            if space.smt_fork(smt_score < 0, probability_true=0.0):
+            if space.smt_fork(smt.lt(smt_score, smt.int_val(0)), probability_true=0.0):
                 debug("Score was leass than zero; ignoring.")
                 return False
             if best_score is not None and space.smt_fork(
-                smt_score >= best_score, probability_true=0.0
+                smt.ge(smt_score, smt.int_val(best_score)), probability_true=0.0
             ):
                 debug("Does not beat the best score of", best_score)
                 return False
@@ -133,7 +134,9 @@ def path_search(
             test = 1000 if known_max is None else (known_max // 2)
             while True:
                 debug(known_min, test, known_max)
-                if space.smt_fork(smt_score < test, probability_true=1.0):
+                if space.smt_fork(
+                    smt.lt(smt_score, smt.int_val(test)), probability_true=1.0
+                ):
                     known_max = test - 1
                 else:
                     known_min = test

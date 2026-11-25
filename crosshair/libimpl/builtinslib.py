@@ -338,10 +338,6 @@ class SymbolicValue(CrossHairValue):
         """See :func:`~crosshair.core.smt_for_unification`"""
         return None
 
-    def _unary_op(self, op):
-        with NoTracing():
-            return self.__class__(op(self.var), self.python_type)
-
 
 class AtomicSymbolicValue(SymbolicValue):
     def __init_var__(self, typ, varname):
@@ -527,6 +523,7 @@ def force_to_smt_sort(
 TypePair = Tuple[type, type]
 BinFn = Callable[[Any, Any], Any]
 SmtBinFn = Callable[[smt.ExprRef, smt.ExprRef], smt.ExprRef]
+SmtUnaryFn = Callable[[smt.ExprRef], smt.ExprRef]
 OpHandler = Union[_Missing, Callable[[BinFn, Number, Number], Number]]
 
 _BIN_OPS: Dict[Tuple[BinFn, type, type], OpHandler] = {}
@@ -686,6 +683,7 @@ _ALL_OPS = _ARITHMETIC_AND_COMPARISON_OPS.union(_BITWISE_OPS)
 
 _SMT_INT_ZERO = smt.int_val(0)
 _SMT_INT_ONE = smt.int_val(1)
+_SMT_INT_TWO = smt.int_val(2)
 _SMT_REAL_ZERO = smt.real_val(0)
 
 _SMT_ORDERED_COMPARISONS: Dict[BinFn, SmtBinFn] = {
@@ -1211,14 +1209,20 @@ def setup_binops():
 
 
 class SymbolicNumberAble(SymbolicValue, Real):
+    _smt_unary_ops = cast(Dict[Callable, SmtUnaryFn], {})
+
     def __pos__(self):
         return self
 
     def __neg__(self):
-        return self._unary_op(ops.neg)
+        with NoTracing():
+            smt_neg = self._smt_unary_ops[ops.neg]
+            return self.__class__(smt_neg(self.var), self.python_type)
 
     def __abs__(self):
-        return self._unary_op(lambda v: smt.ite(v < 0, -v, v))
+        with NoTracing():
+            smt_abs = self._smt_unary_ops[ops.abs]
+            return self.__class__(smt_abs(self.var), self.python_type)
 
     def __lt__(self, other):
         return numeric_binop(ops.lt, self, other)
@@ -1441,6 +1445,7 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         ops.sub: smt.sub,
         ops.mul: smt.mul,
     }
+    _smt_unary_ops = {ops.neg: smt.neg, ops.abs: smt.abs_}
 
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type = int):
         assert typ == int
@@ -1518,8 +1523,8 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
                 overflow_boundary = smt.int_val(_INT_TO_FLOAT_OVERFLOW_BOUNDARY)
                 if space.smt_fork(
                     smt.or_(
-                        self.var >= overflow_boundary,
-                        self.var <= -overflow_boundary,
+                        smt.ge(self.var, overflow_boundary),
+                        smt.le(self.var, smt.neg(overflow_boundary)),
                     )
                 ):
                     raise OverflowError("int too large to convert to float")
@@ -1545,7 +1550,7 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
     def __bool__(self):
         with NoTracing():
             return SymbolicBool(
-                self.var != 0
+                smt.distinct(self.var, _SMT_INT_ZERO)
             ).__bool__()  # TODO: can we leave this symbolic?
 
     def __int__(self):
@@ -1559,18 +1564,22 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         with NoTracing():
             space = context_statespace()
             var = self.var
-            factor = 10 ** (-realize(ndigits))
-            half = factor // 2
-            on_border = (var + half) % factor == 0
+            factor_int = 10 ** (-realize(ndigits))
+            factor = smt.int_val(factor_int)
+            half = smt.int_val(factor_int // 2)
+            on_border = smt.eq(smt.mod(smt.add(var, half), factor), _SMT_INT_ZERO)
             if space.smt_fork(on_border):
-                floor = var - (var % factor)
-                if space.smt_fork((var / factor) % 2 == 0):
+                floor = smt.sub(var, smt.mod(var, factor))
+                quotient = smt.div(var, factor)
+                if space.smt_fork(
+                    smt.eq(smt.mod(quotient, _SMT_INT_TWO), _SMT_INT_ZERO)
+                ):
                     smt_ret = floor
                 else:
-                    smt_ret = floor + factor
+                    smt_ret = smt.add(floor, factor)
             else:
-                var = var + half
-                smt_ret = var - (var % factor)
+                var = smt.add(var, half)
+                smt_ret = smt.sub(var, smt.mod(var, factor))
             return SymbolicInt(smt_ret)
 
     def bit_length(self) -> "SymbolicInt":
@@ -1579,17 +1588,13 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             return (abs_self // 256).bit_length() + 8
         with NoTracing():
             val = abs_self.var
-            # fmt: off
+            length = smt.int_val(8)
+            for bits in range(7, 0, -1):
+                below = smt.lt(val, smt.int_val(2**bits))
+                length = smt.ite(below, smt.int_val(bits), length)
             return SymbolicInt(
-                smt.ite(val == 0, smt.int_val(0),
-                smt.ite(val < 2, smt.int_val(1),
-                smt.ite(val < 4, smt.int_val(2),
-                smt.ite(val < 8, smt.int_val(3),
-                smt.ite(val < 16, smt.int_val(4),
-                smt.ite(val < 32, smt.int_val(5),
-                smt.ite(val < 64, smt.int_val(6),
-                smt.ite(val < 128, smt.int_val(7), smt.int_val(8))))))))))
-            # fmt: on
+                smt.ite(smt.eq(val, _SMT_INT_ZERO), _SMT_INT_ZERO, length)
+            )
 
     if version_info >= (3, 12):
 
@@ -1625,8 +1630,12 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             if self < 0 or self >= 256**length:
                 raise OverflowError
         with NoTracing():
+            byte_modulus = smt.int_val(256)
             intarray = [
-                SymbolicInt((self.var / (2 ** (i * 8))) % 256) for i in range(length)
+                SymbolicInt(
+                    smt.mod(smt.div(self.var, smt.int_val(256**i)), byte_modulus)
+                )
+                for i in range(length)
             ]
             if realize(byteorder) == "big":
                 intarray.reverse()
@@ -1713,36 +1722,27 @@ class SymbolicBoundedInt(SymbolicInt):
                 self._ch_maximum = new_max
                 space.add(smt.le(self.var, smt.int_val(new_max)))
 
-    def _unary_op(self, op):
+    def __neg__(self):
         with NoTracing():
-            if op is ops.neg:
-                new_min = -self._ch_maximum if self._ch_maximum is not None else None
-                new_max = -self._ch_minimum if self._ch_minimum is not None else None
-                return SymbolicBoundedInt(op(self.var), int, new_min, new_max)
-            elif op is ops.abs:
-                if self._ch_minimum is not None and self._ch_minimum >= 0:
-                    return self
-                if self._ch_maximum is not None and self._ch_maximum <= 0:
-                    return SymbolicBoundedInt(
-                        -self.var,
-                        int,
-                        -self._ch_maximum,
-                        -self._ch_minimum if self._ch_minimum is not None else None,
-                    )
-                if self._ch_maximum is not None or self._ch_minimum is not None:
-                    # range includes zero; compute max abs value
-                    max_abs = max(
-                        abs(self._ch_minimum or 0),
-                        abs(self._ch_maximum or 0),
-                    )
-                    return SymbolicInt(op(self.var), int, 0, max_abs)
-                return SymbolicInt(op(self.var), int, 0, None)
-            elif op is ops.pos:
+            low, high = self._ch_minimum, self._ch_maximum
+            return SymbolicBoundedInt(
+                smt.neg(self.var),
+                int,
+                None if high is None else -high,
+                None if low is None else -low,
+            )
+
+    def __abs__(self):
+        with NoTracing():
+            low, high = self._ch_minimum, self._ch_maximum
+            if low is not None and low >= 0:
                 return self
-            elif op is ops.invert:
-                pass  # TODO: we could do something for bitwise negation
-            # Default to unbounded:
-            return SymbolicInt(op(self.var), int)
+            if high is not None and high <= 0:
+                return SymbolicBoundedInt(
+                    smt.neg(self.var), int, -high, None if low is None else -low
+                )
+            max_abs = None if low is None or high is None else max(-low, high)
+            return SymbolicBoundedInt(smt.abs_(self.var), int, 0, max_abs)
 
 
 def make_bounded_int(
@@ -1769,7 +1769,9 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
 
     def __bool__(self):
         with NoTracing():
-            return SymbolicBool(self.var != 0).__bool__()
+            return SymbolicBool(
+                smt.distinct(self.var, self._smt_promote_literal(0.0))
+            ).__bool__()
 
     def __float__(self):
         with NoTracing():
@@ -1805,6 +1807,7 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
         ops.mul: functools.partial(smt.fp_mul, smt.RNE),
         ops.truediv: functools.partial(smt.fp_div, smt.RNE),
     }
+    _smt_unary_ops = {ops.neg: smt.fp_neg, ops.abs: smt.fp_abs}
 
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type = float):
         if not isinstance(smtvar, str) and not smt.has_fp_sort(smtvar):
@@ -1897,6 +1900,14 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
 _SMT_ONE_HALF = smt.real_val("1/2")
 
 
+def _smt_real_trunc(var: smt.ExprRef) -> smt.ExprRef:
+    return smt.ite(
+        smt.ge(var, _SMT_REAL_ZERO),
+        smt.to_int(var),
+        smt.neg(smt.to_int(smt.neg(var))),
+    )
+
+
 class RealBasedSymbolicFloat(SymbolicFloat):
     _smt_binops = {
         **_SMT_ORDERED_COMPARISONS,
@@ -1905,6 +1916,7 @@ class RealBasedSymbolicFloat(SymbolicFloat):
         ops.mul: smt.mul,
         ops.truediv: smt.real_div,
     }
+    _smt_unary_ops = {ops.neg: smt.neg, ops.abs: smt.abs_}
 
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type = float):
         assert typ is float, (
@@ -1925,8 +1937,7 @@ class RealBasedSymbolicFloat(SymbolicFloat):
 
     def __int__(self):
         with NoTracing():
-            var = self.var
-            return SymbolicInt(smt.ite(var >= 0, smt.to_int(var), -smt.to_int(-var)))
+            return SymbolicInt(_smt_real_trunc(self.var))
 
     def __round__(self, ndigits=None):
         if ndigits is not None:
@@ -1938,13 +1949,14 @@ class RealBasedSymbolicFloat(SymbolicFloat):
             var, floor, nearest = (
                 self.var,
                 smt.to_int(self.var),
-                smt.to_int(self.var + _SMT_ONE_HALF),
+                smt.to_int(smt.add(self.var, _SMT_ONE_HALF)),
             )
+            floor_is_even = smt.eq(smt.mod(floor, _SMT_INT_TWO), _SMT_INT_ZERO)
             ret = SymbolicInt(
                 smt.ite(
-                    var != floor + _SMT_ONE_HALF,
+                    smt.distinct(var, smt.add(smt.to_real(floor), _SMT_ONE_HALF)),
                     nearest,
-                    smt.ite(floor % 2 == 0, floor, floor + 1),
+                    smt.ite(floor_is_even, floor, smt.add(floor, _SMT_INT_ONE)),
                 )
             )
             context_statespace().defer_assumption(
@@ -1962,20 +1974,28 @@ class RealBasedSymbolicFloat(SymbolicFloat):
     def __ceil__(self):
         with NoTracing():
             var, floor = self.var, smt.to_int(self.var)
-            return SymbolicInt(smt.ite(var == floor, floor, floor + 1))
+            return SymbolicInt(
+                smt.ite(
+                    smt.eq(var, smt.to_real(floor)), floor, smt.add(floor, _SMT_INT_ONE)
+                )
+            )
 
     def __trunc__(self):
         with NoTracing():
-            var = self.var
-            return SymbolicInt(smt.ite(var >= 0, smt.to_int(var), -smt.to_int(-var)))
+            return SymbolicInt(_smt_real_trunc(self.var))
 
     def as_integer_ratio(self) -> Tuple[Integral, Integral]:
         with NoTracing():
             space = context_statespace()
             numerator = SymbolicInt("numerator" + space.uniq())
             denominator = SymbolicInt("denominator" + space.uniq())
-            space.add(denominator.var > 0)
-            space.add(numerator.var == denominator.var * self.var)
+            space.add(smt.gt(denominator.var, _SMT_INT_ZERO))
+            space.add(
+                smt.eq(
+                    smt.to_real(numerator.var),
+                    smt.mul(smt.to_real(denominator.var), self.var),
+                )
+            )
 
         # There are many valid integer ratios to return. Experimentally, both
         # z3 and CPython tend to pick the same ones. But verify this, while
@@ -2011,7 +2031,7 @@ class SymbolicDictOrSet(SymbolicValue):
             self.smt_key_sort = HeapRef
             self.heap = space.heap
         SymbolicValue.__init__(self, smtvar, typ)
-        space.add(self._len() >= 0)
+        space.add(smt.ge(self._len(), _SMT_INT_ZERO))
 
     def __ch_realize__(self):
         return origin_of(self.python_type)(self)
@@ -2028,7 +2048,7 @@ class SymbolicDictOrSet(SymbolicValue):
 
     def __bool__(self):
         with NoTracing():
-            return SymbolicBool(self._len() != 0).__bool__()
+            return SymbolicBool(smt.distinct(self._len(), _SMT_INT_ZERO)).__bool__()
 
 
 # TODO: rename to SymbolicImmutableMap (ShellMutableMap is the real symbolic `dict` class)
@@ -2057,7 +2077,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             self.smt_key_sort, smt.apply(maybe_val.constructors["missing"])
         )
         self._iter_cache: List[smt.ExprRef] = []
-        space.add((arr_var == self.empty) == (len_var == 0))
+        space.add(smt.eq(smt.eq(arr_var, self.empty), smt.eq(len_var, _SMT_INT_ZERO)))
 
         def dict_can_be_iterated():
             list(self.__iter__())
@@ -2096,7 +2116,10 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 other_key_smt,
                 smt.apply(self.val_constructor, other_value_smt),
             )
-        return smt.and_(self._len() == otherlen, comparison_smt_array == self._arr())
+        return smt.and_(
+            smt.eq(self._len(), smt.int_val(otherlen)),
+            smt.eq(comparison_smt_array, self._arr()),
+        )
 
     def __eq__(self, other):
         self_arr, self_len = self.var
@@ -2104,7 +2127,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             if isinstance(other, SymbolicDict):
                 other_arr, other_len = other.var
                 return SymbolicBool(
-                    smt.and_(self_len == other_len, self_arr == other_arr)
+                    smt.and_(smt.eq(self_len, other_len), smt.eq(self_arr, other_arr))
                 )
         # Manually check equality. Drive the loop from the (likely) concrete value 'other':
         if not isinstance(other, collections.abc.Mapping):
@@ -2140,11 +2163,11 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                     if self_k == k:
                         return self[self_k]
                 raise KeyError
-            possibly_missing = self._arr()[smt_key]
+            possibly_missing = smt.select(self._arr(), smt_key)
             is_missing = smt.apply(self.val_missing_checker, possibly_missing)
             if SymbolicBool(is_missing).__bool__():
                 raise KeyError
-            if SymbolicBool(self._len() == 0).__bool__():
+            if SymbolicBool(smt.eq(self._len(), _SMT_INT_ZERO)).__bool__():
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
             return smt_to_ch_value(
                 context_statespace(),
@@ -2163,7 +2186,9 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             space = context_statespace()
             idx = 0
             key_sort = self.smt_key_sort
-            arr_sort = smt.array_sort(key_sort, possibly_missing(self.smt_val_sort).sort)
+            arr_sort = smt.array_sort(
+                key_sort, possibly_missing(self.smt_val_sort).sort
+            )
             val_constructor = self.val_constructor
             val_sort = self.smt_val_sort
             is_missing = self.val_missing_checker
@@ -2213,7 +2238,9 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
         self._iter_cache: List[smt.ExprRef] = []
         self.empty = smt.const_array(self.smt_key_sort, smt.false)
         space = context_statespace()
-        space.add((self._arr() == self.empty) == (self._len() == 0))
+        space.add(
+            smt.eq(smt.eq(self._arr(), self.empty), smt.eq(self._len(), _SMT_INT_ZERO))
+        )
         space.defer_assumption("symbolic set is consistent", self._is_consistent)
 
     @assert_tracing(True)
@@ -2239,7 +2266,7 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
                 target_len += 1
             if len(items) >= 2:
                 space.add(smt.distinct(*items))
-            return SymbolicBool(comparison_smt_array == self._arr())
+            return SymbolicBool(smt.eq(comparison_smt_array, self._arr()))
 
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
@@ -2261,7 +2288,10 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
             comparison_smt_array = smt.store(
                 comparison_smt_array, other_item_smt, smt.true
             )
-        return smt.and_(self._len() == otherlen, comparison_smt_array == self._arr())
+        return smt.and_(
+            smt.eq(self._len(), smt.int_val(otherlen)),
+            smt.eq(comparison_smt_array, self._arr()),
+        )
 
     def __repr__(self):
         if self:
@@ -2279,7 +2309,7 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
             if other.smt_key_sort == self.smt_key_sort:
                 # TODO: this is wrong for HeapRef sets (which could customize __eq__)
                 return SymbolicBool(
-                    smt.and_(self_len == other_len, self_arr == other_arr)
+                    smt.and_(smt.eq(self_len, other_len), smt.eq(self_arr, other_arr))
                 )
         if not isinstance(
             other, (set, frozenset, SymbolicFrozenSet, collections.abc.Set)
@@ -2321,7 +2351,7 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
             else:
                 k = None
             if k is not None:
-                present = self._arr()[k]
+                present = smt.select(self._arr(), k)
                 return SymbolicBool(present)
         # Fall back to standard equality and iteration
         for self_item in self:
@@ -2502,7 +2532,7 @@ class SymbolicSequence(SymbolicValue, collections.abc.Sequence):
 
     def __bool__(self):
         with NoTracing():
-            return SymbolicBool(smt.seq_len(self.var) > 0).__bool__()
+            return SymbolicBool(smt.gt(smt.seq_len(self.var), _SMT_INT_ZERO)).__bool__()
 
     def __mul__(self, other):
         if not isinstance(other, int):
@@ -2561,7 +2591,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             return None
         otherlen = len(other_value)
         assert isinstance(otherlen, int)
-        requirements = [self._len() == otherlen]
+        requirements = [smt.eq(self._len(), smt.int_val(otherlen))]
         if otherlen == 0:
             return requirements[0]
         arr = self._arr()
@@ -2569,9 +2599,11 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             return None
         for idx, other_item in enumerate(other_value):
             other_item_smt = self.ch_item_type._coerce_to_smt_sort(other_item)
-            requirements.append(smt.select(arr, smt.int_val(idx)) == other_item_smt)
-        if None in requirements:
-            return None
+            if other_item_smt is None:
+                return None
+            requirements.append(
+                smt.eq(smt.select(arr, smt.int_val(idx)), other_item_smt)
+            )
         return smt.and_(*requirements)
 
     def __len__(self):
@@ -2591,7 +2623,9 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 and self.item_smt_sort == other.item_smt_sort
             ):
                 return SymbolicBool(
-                    smt.and_(self_len == other._len(), self_arr == other._arr())
+                    smt.and_(
+                        smt.eq(self_len, other._len()), smt.eq(self_arr, other._arr())
+                    )
                 )
             if not is_iterable(other):
                 return False
@@ -2676,9 +2710,9 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                     idx_in_range = smt.exists(
                         [idx],
                         smt.and_(
-                            0 <= idx,
-                            idx < self._len(),
-                            smt.select(self._arr(), idx) == smt_other,
+                            smt.le(_SMT_INT_ZERO, idx),
+                            smt.lt(idx, self._len()),
+                            smt.eq(smt.select(self._arr(), idx), smt_other),
                         ),
                     )
                     return SymbolicBool(idx_in_range)
@@ -3024,7 +3058,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
                 for pytype, probability_true in _EAGER_OBJECT_SUBTYPES:
                     smt_type = type_repo.get_type(pytype)
                     if space.smt_fork(
-                        self.var == smt_type, probability_true=probability_true
+                        smt.eq(self.var, smt_type), probability_true=probability_true
                     ):
                         return pytype
                 raise CrosshairUnsupported(
@@ -3034,7 +3068,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
                 for pytype, probability_true in iter_types(cap, include_abstract=True):
                     smt_type = type_repo.get_type(pytype)
                     if space.smt_fork(
-                        self.var == smt_type, probability_true=probability_true
+                        smt.eq(self.var, smt_type), probability_true=probability_true
                     ):
                         return pytype
                 # Do not assume that we have a complete set of possible subclasses:
@@ -3283,7 +3317,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         except TypeError:
             return None
         assert isinstance(otherlen, int)
-        requirements = [self._len.var == otherlen]
+        requirements = [smt.eq(self._len.var, smt.int_val(otherlen))]
         if otherlen == 0:
             return requirements[0]
 
@@ -3293,7 +3327,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
             other_value_smt = SymbolicInt._coerce_to_smt_sort(other_value)
             if other_value_smt is None:
                 return None
-            requirements.append(my_value.var == other_value_smt)
+            requirements.append(smt.eq(my_value.var, other_value_smt))
         return smt.and_(*requirements)
 
     @assert_tracing(False)
@@ -3326,7 +3360,10 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
             else:
                 smtval = smt.const(varname, smt.int_sort)
                 constraints = [
-                    smt.and_(minval <= smtval, smtval <= maxval)
+                    smt.and_(
+                        smt.le(smt.int_val(minval), smtval),
+                        smt.le(smtval, smt.int_val(maxval)),
+                    )
                     for minval, maxval in ranges
                 ]
                 space.add(smt.or_(*constraints))
@@ -3342,7 +3379,8 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         return self._len
 
     def __bool__(self) -> bool:
-        return self._len.var > 0
+        with NoTracing():
+            return SymbolicBool(smt.gt(self._len.var, _SMT_INT_ZERO)).__bool__()
 
     def __eq__(self, other):
         if self is other:
@@ -3352,12 +3390,12 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         otherlen = len(other)
         with NoTracing():
             otherlen = realize(otherlen)
-            constraints = [self._len.var == otherlen]
+            constraints = [smt.eq(self._len.var, smt.int_val(otherlen))]
             for int1, int2 in zip(
                 self._get_smt_component_prefix(otherlen), tracing_iter(other)
             ):
                 smtint2 = force_to_smt_sort(int2, SymbolicInt)
-                constraints.append(int1.var == smtint2)
+                constraints.append(smt.eq(int1.var, smtint2))
             return SymbolicBool(smt.and_(*constraints))
 
     def __repr__(self):
@@ -4987,7 +5025,7 @@ def make_tuple(creator: SymbolicFactory, *type_args):
 
 def make_range(creator: SymbolicFactory) -> SymbolicRange:
     step = SymbolicInt(creator.varname + "_step")
-    creator.space.add(step.var != 0)
+    creator.space.add(smt.distinct(step.var, _SMT_INT_ZERO))
     return SymbolicRange(creator(int, "_start"), creator(int, "_stop"), step)
 
 
@@ -5628,7 +5666,12 @@ def _str_contains(
             my_codepoints[i : i + len_to_find] for i in range(num_options)
         ]
         conjunctions = (
-            smt.and_(*(cp1 == cp2 for (cp1, cp2) in zip(other_codepoints, cps)))
+            smt.and_(
+                *(
+                    smt.eq(cp1, smt.int_val(cp2))
+                    for (cp1, cp2) in zip(other_codepoints, cps)
+                )
+            )
             for cps in codepoint_options
         )
         return SymbolicBool(smt.or_(*conjunctions))

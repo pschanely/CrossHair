@@ -35,6 +35,7 @@ from z3 import (
     Z3_mk_eq,
     Z3_mk_exists_const,
     Z3_mk_forall_const,
+    Z3_mk_fpa_abs,
     Z3_mk_fpa_add,
     Z3_mk_fpa_div,
     Z3_mk_fpa_eq,
@@ -337,6 +338,12 @@ def neg(expr: ExprRef) -> ExprRef:
     return _to_expr_ref(Z3_mk_unary_minus(ctx_ref, expr.as_ast()), ctx)
 
 
+def abs_(expr: ExprRef) -> ExprRef:
+    """Absolute value of an integer or real."""
+    zero = real_val(0) if has_real_sort(expr) else int_val(0)
+    return ite(lt(expr, zero), neg(expr), expr)
+
+
 def div(a: ExprRef, b: ExprRef) -> ExprRef:
     """Integer division; the remainder is non-negative."""
     return _to_expr_ref(Z3_mk_div(ctx_ref, a.as_ast(), b.as_ast()), ctx)
@@ -430,6 +437,10 @@ def fp_div(rounding_mode: ExprRef, a: ExprRef, b: ExprRef) -> FPRef:
     return FPRef(
         Z3_mk_fpa_div(ctx_ref, rounding_mode.as_ast(), a.as_ast(), b.as_ast()), ctx
     )
+
+
+def fp_abs(expr: ExprRef) -> FPRef:
+    return FPRef(Z3_mk_fpa_abs(ctx_ref, expr.as_ast()), ctx)
 
 
 def fp_neg(expr: ExprRef) -> FPRef:
