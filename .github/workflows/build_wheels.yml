@@ -58,10 +58,9 @@ jobs:
           # z3-solver and hypothesis publish wasm wheels for. Wheels for older
           # Pyodide releases target an ABI those dependencies do not ship.
           CIBW_BUILD: cp314-pyodide_wasm32
+          # pytest-timeout is left out: its watchdog thread cannot start in wasm.
           CIBW_TEST_REQUIRES: "pytest hypothesis"
-          # faulthandler_timeout (set in pyproject.toml) arms a per-test watchdog
-          # thread, which wasm cannot start; 0 keeps crash tracebacks without it.
-          CIBW_TEST_COMMAND: pytest {project}/crosshair -m smoke -o faulthandler_timeout=0
+          CIBW_TEST_COMMAND: pytest {project}/crosshair -m smoke
           CIBW_BUILD_VERBOSITY: 1
         uses: pypa/cibuildwheel@v4.2.1
 

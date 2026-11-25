@@ -54,6 +54,7 @@ dev = [
     "numpy==2.5.3; python_version >= '3.12'",
     "pre-commit~=4.3",
     "pytest==9.1.1",
+    "pytest-timeout==2.4.0",
     "pytest-xdist==3.8.0",
     "ruff==0.17.4",
     "setuptools",
@@ -112,7 +113,9 @@ match = ".*(?<!_test).py$"
 [tool.pytest.ini_options]
 python_files = ["*_test.py"]
 addopts = "--tb=native --assert=plain -p no:hypothesispytest"
-faulthandler_timeout = 600
+# Only the thread method can interrupt a test stuck inside a solver call.
+timeout = 600
+timeout_method = "thread"
 markers = [
     "demo: mark a test to show as an example for end users",
     "smoke: mark a test to use for quick testing or per-wheel testing",
