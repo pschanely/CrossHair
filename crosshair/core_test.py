@@ -15,6 +15,7 @@ from crosshair.core import (
     deep_realize,
     get_constructor_signature,
     is_deeply_immutable,
+    list_targets,
     proxy_for_class,
     proxy_for_type,
     run_checkables,
@@ -523,6 +524,17 @@ def test_abstract_class_checks_only_static_and_class_methods() -> None:
     # instance and are still checked.
     messages = run_checkables(analyze_class(AbstractShape))
     assert [m.state for m in messages] == [MessageType.CONFIRMED] * 2
+
+
+def test_list_targets_mirrors_abstract_class_skips() -> None:
+    infos = {info.name: info for info in list_targets(AbstractShape)}
+    prefix = f"{AbstractShape.__module__}.AbstractShape"
+    assert infos[f"{prefix}.area"].checked is False
+    assert infos[f"{prefix}.area"].reason == "abstract method"
+    assert infos[f"{prefix}.describe"].checked is False
+    assert infos[f"{prefix}.describe"].reason == "instance method of an abstract class"
+    assert infos[f"{prefix}.sides_nonneg"].checked is True
+    assert infos[f"{prefix}.label"].checked is True
 
 
 class AbstractCounter(abc.ABC):

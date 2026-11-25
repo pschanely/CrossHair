@@ -68,6 +68,7 @@ from crosshair.enforce import (
 from crosshair.fnutil import (
     FunctionInfo,
     get_top_level_classes_and_functions,
+    get_top_level_non_analyzable_members,
     resolve_signature,
 )
 from crosshair.options import DEFAULT_OPTIONS, AnalysisOptions, AnalysisOptionSet
@@ -1071,6 +1072,48 @@ def analyze_class(
                     yield ClampedCheckable(checkable, cls)
 
 
+@dataclass(frozen=True)
+class _AnalysisPlan:
+    """What `analyze_function` will do with a target: its options, or a reason."""
+
+    full_options: AnalysisOptions
+    conditions: Optional[Conditions] = None
+    skip_reason: Optional[str] = None
+
+
+def _plan_function_analysis(
+    ctxfn: FunctionInfo,
+    options: AnalysisOptionSet,
+    conditions: Optional[Conditions] = None,
+) -> _AnalysisPlan:
+    """
+    Decide whether `analyze_function` would analyze `ctxfn`.
+
+    :param conditions: conditions already parsed by the caller, if any.
+    """
+    pair = ctxfn.get_callable()
+    fn_options = collect_options(pair[0]) if pair else AnalysisOptionSet()
+    full_options = DEFAULT_OPTIONS.overlay(fn_options).overlay(options)
+    if not full_options.enabled:
+        return _AnalysisPlan(
+            full_options, skip_reason='turned off by a "crosshair: off" directive'
+        )
+    if conditions is None:
+        with condition_parser(full_options.analysis_kind) as parser:
+            if not isinstance(ctxfn.context, type):
+                conditions = parser.get_fn_conditions(ctxfn)
+            else:
+                class_conditions = parser.get_class_conditions(ctxfn.context)
+                conditions = class_conditions.methods.get(ctxfn.name)
+    if conditions is None:
+        return _AnalysisPlan(full_options, skip_reason="no conditions found")
+    if list(conditions.syntax_messages()):
+        return _AnalysisPlan(full_options, conditions)
+    if not any(post.evaluate is not None for post in conditions.post):
+        return _AnalysisPlan(full_options, conditions, "no postconditions to check")
+    return _AnalysisPlan(full_options, conditions)
+
+
 def analyze_function(
     ctxfn: Union[FunctionInfo, types.FunctionType, Callable],
     options: AnalysisOptionSet = AnalysisOptionSet(),
@@ -1079,23 +1122,13 @@ def analyze_function(
     if not isinstance(ctxfn, FunctionInfo):
         ctxfn = FunctionInfo.from_fn(ctxfn)
     debug("Analyzing ", ctxfn.name)
-    pair = ctxfn.get_callable()
-    fn_options = collect_options(pair[0]) if pair else AnalysisOptionSet()
-    full_options = DEFAULT_OPTIONS.overlay(fn_options).overlay(options)
-    if not full_options.enabled:
-        debug("Skipping", ctxfn.name, " because CrossHair is not enabled")
+    plan = _plan_function_analysis(ctxfn, options)
+    full_options = plan.full_options
+    if plan.skip_reason is not None:
+        debug("Skipping", ctxfn.name, " because ", plan.skip_reason)
         return []
-
-    with condition_parser(full_options.analysis_kind) as parser:
-        if not isinstance(ctxfn.context, type):
-            conditions = parser.get_fn_conditions(ctxfn)
-        else:
-            class_conditions = parser.get_class_conditions(ctxfn.context)
-            conditions = class_conditions.methods.get(ctxfn.name)
-
-    if conditions is None:
-        debug("Skipping", ctxfn.name, " because it has no conditions")
-        return []
+    conditions = plan.conditions
+    assert conditions is not None
     syntax_messages = list(conditions.syntax_messages())
     if syntax_messages:
         debug("Syntax error(s): ", *(m.message for m in syntax_messages))
@@ -1118,6 +1151,162 @@ def analyze_function(
         for post_condition in conditions.post
         if post_condition.evaluate is not None
     ]
+
+
+@dataclass(frozen=True)
+class TargetInfo:
+    """Whether `check` would analyze a potential target, and why not."""
+
+    name: str
+    """The dotted name of the target, as it would be given on the command line."""
+
+    filename: str
+    """File the target was defined in, or ``"<unknown file>"``."""
+
+    line: int
+    """First line of the target's definition, or 0 when unknown."""
+
+    checked: bool
+    """True when `check` analyzes at least one postcondition on this target."""
+
+    reason: str
+    """Why the target is not checked; empty when it is."""
+
+
+def _target_info(
+    name: str,
+    ctxfn: FunctionInfo,
+    plan: _AnalysisPlan,
+    fallback_filename: str,
+    fallback_line: int,
+) -> TargetInfo:
+    pair = ctxfn.get_callable()
+    if pair is not None:
+        filename, line, _lines = sourcelines(pair[0])
+    else:
+        filename, line = fallback_filename, fallback_line
+    return TargetInfo(
+        name, filename, line, plan.skip_reason is None, plan.skip_reason or ""
+    )
+
+
+def _class_target_infos(cls: type, options: AnalysisOptionSet) -> Iterable[TargetInfo]:
+    """Report which methods of `cls` `analyze_class` would analyze."""
+    class_is_abstract = isabstract(cls)
+    cls_filename, cls_line, _lines = sourcelines(cls)
+    cls_name = f"{cls.__module__}.{cls.__qualname__}"
+    analysis_kinds = DEFAULT_OPTIONS.overlay(options).analysis_kind
+    with condition_parser(analysis_kinds) as parser:
+        class_conditions = parser.get_class_conditions(cls)
+        if not class_conditions.methods:
+            yield TargetInfo(
+                cls_name,
+                cls_filename,
+                cls_line,
+                checked=False,
+                reason="class has no methods with conditions",
+            )
+        for method_name, conditions in class_conditions.methods.items():
+            name = f"{cls_name}.{method_name}"
+            # Note the use of getattr_static to check superclass contracts on
+            # functions that the subclass doesn't define.
+            descriptor = inspect.getattr_static(cls, method_name)
+            if getattr(descriptor, "__isabstractmethod__", False):
+                yield TargetInfo(name, cls_filename, cls_line, False, "abstract method")
+                continue
+            if class_is_abstract and not isinstance(
+                descriptor, (staticmethod, classmethod)
+            ):
+                yield TargetInfo(
+                    name,
+                    cls_filename,
+                    cls_line,
+                    False,
+                    "instance method of an abstract class",
+                )
+                continue
+            if method_name == "__init__":
+                conditions = replace(
+                    conditions,
+                    post=[
+                        c
+                        for c in conditions.post
+                        if c.condition_type != ConditionExprType.INVARIANT
+                    ],
+                )
+            if not conditions.has_any():
+                yield TargetInfo(
+                    name,
+                    cls_filename,
+                    cls_line,
+                    False,
+                    "only class invariants, which are not checked on __init__",
+                )
+                continue
+            ctxfn = FunctionInfo(cls, method_name, descriptor)
+            plan = _plan_function_analysis(ctxfn, options, conditions)
+            yield _target_info(name, ctxfn, plan, cls_filename, cls_line)
+
+
+def list_targets(
+    entity: Union[types.ModuleType, type, FunctionInfo],
+    options: AnalysisOptionSet = AnalysisOptionSet(),
+) -> Iterable[TargetInfo]:
+    """
+    Report every potential target in ``entity`` and whether `check` analyzes it.
+
+    No solving is performed.
+    """
+    if isinstance(entity, FunctionInfo):
+        yield from _function_target_infos(entity, options)
+    elif inspect.isclass(entity):
+        yield from _class_target_infos(cast(Type, entity), options)
+    elif inspect.ismodule(entity):
+        yield from _module_target_infos(cast(types.ModuleType, entity), options)
+    else:
+        raise CrossHairInternal("Entity type not analyzable: " + str(type(entity)))
+
+
+def _function_name(ctxfn: FunctionInfo) -> str:
+    context = ctxfn.context
+    if isinstance(context, types.ModuleType):
+        return f"{context.__name__}.{ctxfn.name}"
+    elif isinstance(context, type):
+        return f"{context.__module__}.{context.__qualname__}.{ctxfn.name}"
+    return ctxfn.name
+
+
+def _function_target_infos(
+    ctxfn: FunctionInfo, options: AnalysisOptionSet
+) -> Iterable[TargetInfo]:
+    pair = ctxfn.get_callable()
+    filename, line = sourcelines(pair[0])[:2] if pair else ("<unknown file>", 0)
+    yield _target_info(
+        _function_name(ctxfn),
+        ctxfn,
+        _plan_function_analysis(ctxfn, options),
+        filename,
+        line,
+    )
+
+
+def _module_target_infos(
+    module: types.ModuleType, options: AnalysisOptionSet
+) -> Iterable[TargetInfo]:
+    module_filename, module_line = sourcelines(module)[:2]
+    for name, member in get_top_level_classes_and_functions(module):
+        if isinstance(member, type):
+            yield from _class_target_infos(member, options)
+        else:
+            yield _target_info(
+                f"{module.__name__}.{name}",
+                member,
+                _plan_function_analysis(member, options),
+                module_filename,
+                module_line,
+            )
+    for name, reason in get_top_level_non_analyzable_members(module):
+        yield TargetInfo(f"{module.__name__}.{name}", module_filename, 0, False, reason)
 
 
 def fn_returning(values: list) -> Callable:

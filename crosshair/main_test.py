@@ -1,4 +1,5 @@
 import io
+import json
 import re
 import subprocess
 import sys
@@ -91,6 +92,24 @@ class Fooey:
   def incr(self, x: int) -> int:
     ''' post: _ == x '''
     return x + 1
+"""
+}
+
+MIXED_TARGETS = {
+    "foo.py": """
+def checked_fn(x: int) -> int:
+  ''' post: _ == x '''
+  return x
+
+def unchecked_fn(x: int) -> int:
+  return x
+
+class Fooey:
+  def inherited_check(self, x: int) -> int:
+    ''' post: _ == x '''
+    return x
+
+CONST = 3
 """
 }
 
@@ -273,6 +292,53 @@ def test_assert_without_checkable(root, capsys: pytest.CaptureFixture[str]):
     )
     assert out == ""
     assert exitcode == 0
+
+
+def test_list_targets_reports_checked_and_skipped(
+    root: Path, capsys: pytest.CaptureFixture[str]
+):
+    simplefs(root, MIXED_TARGETS)
+    exitcode = unwalled_main(["check", str(root / "foo.py"), "--list_targets"])
+    out, err = capsys.readouterr()
+    assert err == ""
+    lines = [ln for ln in out.split("\n") if ln]
+    assert len(lines) == 4
+    assert lines[0].endswith("foo.py:10: info: foo.Fooey.inherited_check: checked")
+    assert lines[1].endswith("foo.py:2: info: foo.checked_fn: checked")
+    assert lines[2].endswith(
+        "foo.py:6: info: foo.unchecked_fn: not checked (no postconditions to check)"
+    )
+    assert lines[3] == "2 of 3 potential targets would be analyzed."
+    assert exitcode == 0
+
+
+def test_list_targets_json(root: Path, capsys: pytest.CaptureFixture[str]):
+    simplefs(root, MIXED_TARGETS)
+    exitcode = unwalled_main(
+        ["check", str(root / "foo.py"), "--list_targets", "--json"]
+    )
+    out, err = capsys.readouterr()
+    assert err == ""
+    assert exitcode == 0
+    report = json.loads(out)
+    checked = sorted(t["name"] for t in report["targets"] if t["checked"])
+    assert checked == ["foo.Fooey.inherited_check", "foo.checked_fn"]
+    unchecked = {t["name"]: t["reason"] for t in report["targets"] if not t["checked"]}
+    assert unchecked == {"foo.unchecked_fn": "no postconditions to check"}
+    for target in report["targets"]:
+        assert target["filename"].endswith("foo.py")
+        assert isinstance(target["line"], int)
+
+
+def test_json_without_list_targets_is_an_error(
+    root: Path, capsys: pytest.CaptureFixture[str]
+):
+    simplefs(root, SIMPLE_FOO)
+    exitcode = unwalled_main(["check", str(root / "foo.py"), "--json"])
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err == "--json is only supported with --list_targets.\n"
+    assert exitcode == 2
 
 
 def test_directives(root):

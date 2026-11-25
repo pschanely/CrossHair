@@ -385,3 +385,25 @@ def get_top_level_classes_and_functions(
             yield (name, FunctionInfo.from_module(module, name))
         elif isclass(member):
             yield (name, member)
+
+
+def get_top_level_non_analyzable_members(
+    module: ModuleType,
+) -> Iterable[Tuple[str, str]]:
+    """
+    Yield members of ``module`` that were defined here, but skipped.
+
+    :returns: pairs of (name, reason), where reason describes why the member
+        cannot be analyzed.
+    """
+    module_name = module.__name__
+    for name, member in getmembers(module):
+        if getattr(member, "__module__", None) != module_name:
+            continue
+        if isfunction(member) or ismethod(member) or isclass(member):
+            continue
+        if callable(member):
+            reason = "not a plain function or class"
+        else:
+            reason = "not a function or class"
+        yield (name, reason)

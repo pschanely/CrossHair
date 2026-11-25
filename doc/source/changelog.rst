@@ -18,6 +18,10 @@ Next Version
  * Fixed ``reversed()`` on a mutated symbolic dict (for example, the result of
    ``|``) yielding overwritten keys twice.
    (`see #518 <https://github.com/pschanely/CrossHair/issues/518>`__)
+ * Added ``check --list_targets``, which reports every potential target, whether
+   it would be analyzed, and why not, without running the solver. Add ``--json``
+   for machine-readable output. (`see #571
+   <https://github.com/pschanely/CrossHair/issues/571>`__)
 
 
 Version 0.0.114
