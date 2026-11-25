@@ -1390,17 +1390,17 @@ def analyze_calltree(
             )
         return PathOutcome(call_analysis)
 
-    def verify(candidate: Tuple[CallAnalysis, ConcreteRefutation]) -> bool:
+    def is_reproducible(candidate: Tuple[CallAnalysis, ConcreteRefutation]) -> bool:
         _, refutation = candidate
         return replay_refutation(
             conditions, refutation, options, short_circuit, enforced_conditions
         )
 
-    exploration = explore_loop(options, search_root, run_path, verify)
+    exploration = explore_loop(options, search_root, run_path, is_reproducible)
     space_exhausted = exploration.exhausted
-    if exploration.verified_candidate is not None:
+    if exploration.accepted_candidate is not None:
         top_analysis, _ = cast(
-            Tuple[CallAnalysis, ConcreteRefutation], exploration.verified_candidate
+            Tuple[CallAnalysis, ConcreteRefutation], exploration.accepted_candidate
         )
     else:
         top_analysis = search_root.child.get_result()
@@ -1459,7 +1459,7 @@ PathCompeltionCallback = Callable[
         Optional[BaseException],
         Optional[StackSummary],
     ],
-    bool,
+    object,
 ]
 
 
@@ -1469,8 +1469,8 @@ class PathOutcome:
     The result of exploring one path.
 
     `analysis` is bubbled into the search tree; `breakout` requests that the
-    exploration stop after this path. A `candidate` also stops the exploration,
-    and is given to the exploration's `verify` callback.
+    exploration stop after this path. A `candidate` pauses the exploration, and
+    is given to the exploration's `consider_candidate` callback.
     """
 
     analysis: CallAnalysis
@@ -1483,14 +1483,14 @@ class ExplorationResult:
     top_analysis: Optional[CallAnalysis]
     exhausted: bool
     iterations: int
-    verified_candidate: object = None
+    accepted_candidate: object = None
 
 
 def explore_loop(
     options: AnalysisOptions,
     search_root: RootNode,
     run_path: Callable[[StateSpace], PathOutcome],
-    verify: Callable[[Any], bool] = lambda candidate: True,
+    consider_candidate: Callable[[Any], bool] = lambda candidate: True,
 ) -> ExplorationResult:
     """
     The shared per-path exploration loop.
@@ -1499,10 +1499,10 @@ def explore_loop(
     CallAnalysis to bubble into the search tree (and may request an early stop).
     Classifies the control-flow exceptions (`IgnoreAttempt`, `UnexploredPath`)
     uniformly; anything else (including `NotDeterministic`) is `run_path`'s to
-    handle. Stops on caller breakout, a candidate that `verify` accepts, path
-    exhaustion, the per-condition timeout, the iteration cap, or too many
-    uninteresting iterations. `verify` runs outside of any StateSpace and
-    without symbolic patches.
+    handle. Stops on caller breakout, a candidate that `consider_candidate`
+    accepts, path exhaustion, the per-condition timeout, the iteration cap, or
+    too many uninteresting iterations. `consider_candidate` runs outside of any
+    StateSpace and without symbolic patches.
     """
     condition_start = process_time()
     max_uninteresting_iterations = options.get_max_uninteresting_iterations()
@@ -1567,9 +1567,9 @@ def explore_loop(
                             break
         if candidate is None:
             break
-        if verify(candidate):
+        if consider_candidate(candidate):
             return ExplorationResult(top_analysis, exhausted, i, candidate)
-        debug("Candidate was not verified; resuming exploration")
+        debug("Resuming exploration after candidate")
         if exhausted:
             break
     return ExplorationResult(top_analysis, exhausted, i)
@@ -1580,11 +1580,16 @@ def explore_paths(
     sig: Signature,
     options: AnalysisOptions,
     search_root: RootNode,
-    on_path_complete: PathCompeltionCallback = (lambda *a: False),
+    on_path_complete: PathCompeltionCallback = (lambda *a: None),
     on_nondeterminism: Optional[Callable[[], None]] = None,
+    consider_candidate: Callable[[Any], bool] = lambda candidate: True,
 ) -> None:
     """
     Runs a path exploration for use cases beyond invariant checking.
+
+    `on_path_complete` may return a candidate (anything but None); exploration
+    then pauses to call `consider_candidate` outside of any StateSpace, and
+    stops if it returns True.
 
     On a nondeterministic path, if `on_nondeterminism` is supplied it is called
     and exploration continues (the path is ignored); otherwise NotDeterministic
@@ -1606,7 +1611,7 @@ def explore_paths(
                 else:
                     user_exc, user_exc_stack = efilter.user_exc
             with ResumedTracing():
-                breakout = on_path_complete(
+                candidate = on_path_complete(
                     space, pre_args, args, ret, user_exc, user_exc_stack
                 )
         except NotDeterministic:
@@ -1615,9 +1620,11 @@ def explore_paths(
             debug("Ignoring nondeterministic path:", format_exc())
             on_nondeterminism()
             return PathOutcome(CallAnalysis())
-        return PathOutcome(CallAnalysis(VerificationStatus.CONFIRMED), breakout)
+        return PathOutcome(
+            CallAnalysis(VerificationStatus.CONFIRMED), candidate=candidate
+        )
 
-    explore_loop(options, search_root, run_path)
+    explore_loop(options, search_root, run_path, consider_candidate)
 
 
 def make_counterexample_message(

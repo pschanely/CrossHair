@@ -13,6 +13,12 @@ def ten_over_difference(x: int, y: int) -> int:
     return 100
 
 
+def float_success(x: int) -> None:
+    if 0 <= x < 10 and x * 0.1 == 0.3:
+        return
+    raise ValueError
+
+
 def do_path_search(
     fn: Callable,
     options: AnalysisOptions,
@@ -50,3 +56,9 @@ def test_optimize_options() -> None:
     )
     assert ret is not None
     ast.literal_eval(ret)  # (just ensure the result is parseable)
+
+
+def test_unreproducible_example_is_not_reported() -> None:
+    opts = DEFAULT_OPTIONS.overlay(AnalysisOptionSet(max_iterations=40))
+    for optimization_kind in OptimizationKind:
+        assert do_path_search(float_success, opts, None, optimization_kind) is None

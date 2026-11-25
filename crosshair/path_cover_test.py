@@ -46,6 +46,12 @@ def _has_no_successful_paths(x: int) -> None:
         context_statespace().defer_assumption("fail", lambda: False)
 
 
+def _float_branch(x: int) -> str:
+    if 0 <= x < 10 and x * 0.1 == 0.3:
+        return "equal"
+    return "not equal"
+
+
 @dataclass
 class Train:
     class Color(Enum):
@@ -66,6 +72,7 @@ exceptionex = FunctionInfo.from_fn(_exceptionex)
 symbolic_exception_example = FunctionInfo.from_fn(_symbolic_exception_example)
 has_no_successful_paths = FunctionInfo.from_fn(_has_no_successful_paths)
 paint_train = FunctionInfo.from_fn(_paint_train)
+float_branch = FunctionInfo.from_fn(_float_branch)
 
 
 def test_path_cover_foo() -> None:
@@ -134,3 +141,10 @@ def test_path_cover_pytest_output() -> None:
         "from crosshair.path_cover_test import _paint_train",
         "from crosshair.path_cover_test import Train",
     }
+
+
+def test_path_cover_reports_concrete_outcomes() -> None:
+    paths = list(path_cover(float_branch, OPTS, CoverageType.PATH))
+    assert paths
+    for path in paths:
+        assert path.result == repr(_float_branch(**path.args.arguments))

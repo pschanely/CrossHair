@@ -6,13 +6,24 @@ from typing import Callable, Optional, Type
 
 from crosshair import smt
 from crosshair.copyext import CopyMode, deepcopyext
-from crosshair.core import ExceptionFilter, LazyCreationRepr, explore_paths
+from crosshair.core import (
+    ExceptionFilter,
+    LazyCreationRepr,
+    deep_realize,
+    explore_paths,
+)
 from crosshair.fnutil import FunctionInfo
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.options import AnalysisOptions
 from crosshair.statespace import RootNode, StateSpace, context_statespace
-from crosshair.tracers import CoverageResult, NoTracing, ResumedTracing
+from crosshair.tracers import (
+    COMPOSITE_TRACER,
+    CoverageResult,
+    NoTracing,
+    ResumedTracing,
+)
 from crosshair.util import (
+    ControlFlowException,
     CrossHairInternal,
     ch_stack,
     debug,
@@ -26,6 +37,13 @@ class OptimizationKind(enum.Enum):
     # realizes prior to generating the string.
     NONE = "NONE"
     MINIMIZE_INT = "MINIMIZE_INT"
+
+
+@dataclass
+class _Example:
+    args: BoundArguments
+    formatted_args: str
+    score: int
 
 
 @dataclass
@@ -63,6 +81,7 @@ def path_search(
             except Exception as exc:
                 raise CrossHairInternal(str(exc)) from exc
 
+    score_concretely = optimization_kind == OptimizationKind.MINIMIZE_INT
     if optimization_kind == OptimizationKind.SIMPLIFY:
         assert optimize_fn is None
 
@@ -84,7 +103,6 @@ def path_search(
     fn, sig = ctxfn.callable()
     search_root = RootNode()
 
-    best_input: Optional[str] = None
     best_score: Optional[int] = None
     _optimize_fn = optimize_fn or (lambda _ret, args: fn(*args.args, **args.kwargs))
 
@@ -95,8 +113,7 @@ def path_search(
         ret,
         exc: Optional[BaseException],
         exc_stack: Optional[traceback.StackSummary],
-    ) -> bool:
-        nonlocal best_input, best_score
+    ) -> Optional[_Example]:
         with NoTracing():
             if exc is not None:
                 debug(
@@ -105,14 +122,13 @@ def path_search(
                     exc,
                     ch_stack(exc_stack),
                 )
-                return False
+                return None
             debug("Path succeeded")
             if optimization_kind == OptimizationKind.NONE:
                 with ResumedTracing():
-                    best_input = checked_format(pre_args)
-                debug("Found input:", best_input)
-                on_example(best_input)
-                return True
+                    space.detach_path()
+                    formatted = checked_format(pre_args)
+                return _Example(deep_realize(pre_args), formatted, 0)
         with NoTracing(), ExceptionFilter() as efilter:
             with ResumedTracing():
                 score = _optimize_fn(ret, pre_args)
@@ -120,15 +136,15 @@ def path_search(
             smt_score = SymbolicInt._coerce_to_smt_sort(score)
             if smt_score is None:
                 debug("non integer score returned; ignoring.")
-                return False
+                return None
             if space.smt_fork(smt.lt(smt_score, smt.int_val(0)), probability_true=0.0):
                 debug("Score was leass than zero; ignoring.")
-                return False
+                return None
             if best_score is not None and space.smt_fork(
                 smt.ge(smt_score, smt.int_val(best_score)), probability_true=0.0
             ):
                 debug("Does not beat the best score of", best_score)
-                return False
+                return None
             known_min = 0
             known_max = best_score
             test = 1000 if known_max is None else (known_max // 2)
@@ -144,17 +160,45 @@ def path_search(
                         test = known_min * 100
                         continue
                 if known_min == known_max:
-                    best_score = known_min
-                    with ResumedTracing():
-                        best_input = checked_format(pre_args)
                     break
                 test = (known_min + known_max + 1) // 2
-            debug("Minimized score to", best_score)
-            debug("For input:", best_input)
-            on_example(best_input)
-            return best_score == 0
+            debug("Minimized score to", known_min)
+            with ResumedTracing():
+                formatted = checked_format(pre_args)
+            return _Example(deep_realize(pre_args), formatted, known_min)
         debug("Skipping path (failure during scoring)", efilter.user_exc)
-        return False
+        return None
+
+    def concrete_score(example: _Example) -> Optional[int]:
+        with NoTracing():
+            args = deepcopyext(example.args, CopyMode.REGULAR, {})
+        with ExceptionFilter() as efilter:
+            ret = fn(*args.args, **args.kwargs)
+            if not score_concretely:
+                return example.score
+            score = _optimize_fn(ret, example.args)
+            if isinstance(score, int) and score >= 0:
+                return score
+            debug("Concrete score is not a non-negative integer:", score)
+            return None
+        debug("Concrete call failed:", efilter.user_exc)
+        return None
+
+    def accept_example(example: _Example) -> bool:
+        nonlocal best_score
+        try:
+            with COMPOSITE_TRACER:
+                score = concrete_score(example)
+        except ControlFlowException as exc:
+            debug("Using symbolic score (unable to replay):", exc)
+            score = example.score
+        if score is None or (best_score is not None and score >= best_score):
+            debug("Rejecting example with concrete score", score)
+            return False
+        best_score = score
+        debug("For input:", example.formatted_args)
+        on_example(example.formatted_args)
+        return best_score == 0
 
     explore_paths(
         lambda ba: fn(*ba.args, **ba.kwargs),
@@ -163,4 +207,5 @@ def path_search(
         search_root,
         on_path_complete,
         on_nondeterminism=on_nondeterminism,
+        consider_candidate=accept_example,
     )
