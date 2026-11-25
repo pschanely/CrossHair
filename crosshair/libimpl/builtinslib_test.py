@@ -4851,7 +4851,7 @@ def test_float_is_integer_nonfinite(space, val):
         PreciseIeeeSymbolicFloat
     )
     x = PreciseIeeeSymbolicFloat("x")
-    space.add(x.var == smt.fp_val(val, x.var.sort()))
+    space.add(x.var == smt.fp_val(val, smt.sort_of(x.var)))
     with ResumedTracing():
         assert not x.is_integer()
 

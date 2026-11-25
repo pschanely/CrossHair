@@ -40,9 +40,11 @@ def test_declare_datatype():
     maybe = smt.declare_datatype(
         "maybe_int", {"none": [], "some": [("val", smt.int_sort)]}
     )
-    assert maybe.num_constructors() == 2
-    some = smt.apply(maybe.some, smt.int_val(3))
-    assert smt.apply(maybe.val, some).sort() == smt.int_sort
+    assert set(maybe.constructors) == {"none", "some"}
+    some = smt.apply(maybe.constructors["some"], smt.int_val(3))
+    assert smt.sort_of(some) == maybe.sort
+    assert smt.has_bool_sort(smt.apply(maybe.recognizers["some"], some))
+    assert smt.sort_of(smt.apply(maybe.accessors["val"], some)) == smt.int_sort
 
 
 @pytest.mark.parametrize(
