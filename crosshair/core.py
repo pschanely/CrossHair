@@ -2063,6 +2063,29 @@ def attempt_call(
         return refutation(CallAnalysis(VerificationStatus.REFUTED, failures), exc)
 
 
+def replay_concretely(
+    options: AnalysisOptions,
+    args: BoundArguments,
+    run: Callable[[BoundArguments], _T],
+    fallback: _T,
+) -> _T:
+    """
+    Call `run` on a copy of `args`, outside of any StateSpace, with tracing on.
+
+    Objects that cannot be copied are shared with `args`.
+
+    Returns `fallback` when the call raises a `ControlFlowException`.
+    """
+    debug("Replaying with concrete arguments")
+    copied = deepcopyext(args, CopyMode.BEST_EFFORT, {})
+    try:
+        with condition_parser(options.analysis_kind), COMPOSITE_TRACER:
+            return run(copied)
+    except ControlFlowException as exc:
+        debug("Unable to replay concretely:", type(exc).__name__, exc)
+        return fallback
+
+
 def replay_refutation(
     conditions: Conditions,
     refutation: ConcreteRefutation,
@@ -2076,14 +2099,13 @@ def replay_refutation(
     Runs outside of any StateSpace. Also returns True when the call encounters a
     symbolic value.
     """
-    debug("Replaying refutation with concrete arguments")
-    try:
-        with condition_parser(options.analysis_kind), COMPOSITE_TRACER, NoTracing():
-            outcome = check_call(
-                conditions, refutation.args, short_circuit, enforced_conditions
-            )
-    except ControlFlowException as exc:
-        debug("Unable to replay concretely:", type(exc).__name__, exc)
+
+    def check(args: BoundArguments) -> Optional[CallOutcome]:
+        with NoTracing():
+            return check_call(conditions, args, short_circuit, enforced_conditions)
+
+    outcome = replay_concretely(options, refutation.args, check, None)
+    if outcome is None:
         return True
     if refutation.reproduced_by(outcome):
         debug("Concrete replay reproduced the refutation")

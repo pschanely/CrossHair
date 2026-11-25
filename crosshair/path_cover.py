@@ -6,7 +6,6 @@ from dataclasses import dataclass, replace
 from inspect import BoundArguments
 from typing import Callable, List, Optional, Set, TextIO, Tuple, Type
 
-from crosshair.copyext import CopyMode, deepcopyext
 from crosshair.core import (
     ExceptionFilter,
     LazyCreationRepr,
@@ -14,19 +13,18 @@ from crosshair.core import (
     deep_realize,
     explore_paths,
     realize,
+    replay_concretely,
 )
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
 from crosshair.statespace import RootNode, StateSpace, context_statespace
 from crosshair.tracers import (
-    COMPOSITE_TRACER,
     CoverageResult,
     CoverageTracingModule,
     NoTracing,
     PushedModule,
 )
 from crosshair.util import (
-    ControlFlowException,
     EvalFriendlyReprContext,
     ReferencedIdentifier,
     ch_stack,
@@ -131,9 +129,7 @@ def path_cover(
     )
 
     def replay(path: PathSummary, plain_result: str) -> PathSummary:
-        with NoTracing():
-            args = deepcopyext(path.args, CopyMode.REGULAR, {})
-        try:
+        def summarize(args: BoundArguments) -> PathSummary:
             with ExceptionFilter() as efilter:
                 ret = run_path(args)
             if efilter.ignore:
@@ -148,24 +144,20 @@ def path_cover(
                 )
             with Patched(), EvalFriendlyReprContext() as ctx:
                 result = ctx.cleanup(builtins.repr(ret))
-        except ControlFlowException as exc:
-            debug("Keeping symbolic path summary (unable to replay):", exc)
-            return path
-        if path.exc is None and result == plain_result:
-            return replayed
-        debug("Concrete replay differs; it returns", result)
-        return replace(
-            replayed,
-            result=result,
-            exc=None,
-            exc_message=None,
-            references=path.references | ctx.repr_references,
-        )
+            if path.exc is None and result == plain_result:
+                return replayed
+            debug("Concrete replay differs; it returns", result)
+            return replace(
+                replayed,
+                result=result,
+                exc=None,
+                exc_message=None,
+                references=path.references | ctx.repr_references,
+            )
 
-    with COMPOSITE_TRACER:
-        paths = [
-            (replay(path, plain_result), plain_result) for path, plain_result in paths
-        ]
+        return replay_concretely(options, path.args, summarize, path)
+
+    paths = [(replay(path, plain_result), plain_result) for path, plain_result in paths]
     summaries = [path for path, _ in paths]
 
     opcodes_found: Set[int] = set()

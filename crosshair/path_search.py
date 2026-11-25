@@ -11,6 +11,7 @@ from crosshair.core import (
     LazyCreationRepr,
     deep_realize,
     explore_paths,
+    replay_concretely,
 )
 from crosshair.fnutil import FunctionInfo
 from crosshair.libimpl.builtinslib import SymbolicInt
@@ -170,28 +171,25 @@ def path_search(
         return None
 
     def concrete_score(example: _Example) -> Optional[int]:
-        with NoTracing():
-            args = deepcopyext(example.args, CopyMode.REGULAR, {})
-        with ExceptionFilter() as efilter:
-            ret = fn(*args.args, **args.kwargs)
-            if not score_concretely:
-                return example.score
-            score = _optimize_fn(ret, example.args)
-            if isinstance(score, int) and score >= 0:
-                return score
-            debug("Concrete score is not a non-negative integer:", score)
+        def score_call(args: BoundArguments) -> Optional[int]:
+            with ExceptionFilter() as efilter:
+                ret = fn(*args.args, **args.kwargs)
+                if not score_concretely:
+                    return example.score
+                score = _optimize_fn(ret, example.args)
+                if isinstance(score, int) and score >= 0:
+                    return score
+                debug("Concrete score is not a non-negative integer:", score)
+                return None
+            debug("Concrete call failed:", efilter.user_exc)
             return None
-        debug("Concrete call failed:", efilter.user_exc)
-        return None
+
+        fallback: Optional[int] = example.score
+        return replay_concretely(options, example.args, score_call, fallback)
 
     def accept_example(example: _Example) -> bool:
         nonlocal best_score
-        try:
-            with COMPOSITE_TRACER:
-                score = concrete_score(example)
-        except ControlFlowException as exc:
-            debug("Using symbolic score (unable to replay):", exc)
-            score = example.score
+        score = concrete_score(example)
         if score is None or (best_score is not None and score >= best_score):
             debug("Rejecting example with concrete score", score)
             return False

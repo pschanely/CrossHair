@@ -8,13 +8,16 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 
 from crosshair import IgnoreAttempt
 from crosshair.behavior_compare import flexible_equal
-from crosshair.copyext import CopyMode, deepcopyext
-from crosshair.core import ExceptionFilter, deep_realize, explore_paths
+from crosshair.core import (
+    ExceptionFilter,
+    deep_realize,
+    explore_paths,
+    replay_concretely,
+)
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
 from crosshair.statespace import RootNode, StateSpace
 from crosshair.tracers import (
-    COMPOSITE_TRACER,
     CoverageResult,
     CoverageTracingModule,
     NoTracing,
@@ -269,17 +272,15 @@ def diff_behavior_with_signature(
     def replay(
         pre_args: inspect.BoundArguments, symbolic_diff: BehaviorDiff
     ) -> Optional[BehaviorDiff]:
-        with NoTracing():
-            args1 = deepcopyext(pre_args, CopyMode.REGULAR, {})
-        try:
+        def compare(args1: inspect.BoundArguments) -> Optional[BehaviorDiff]:
             run = run_both(args1)
             if is_equivalent(args1, run):
                 debug("Concrete replay found no difference for", symbolic_diff.args)
                 return None
             return describe_diff(pre_args, args1, run)
-        except ControlFlowException as exc:
-            debug("Keeping symbolic behavior difference (unable to replay):", exc)
-            return symbolic_diff
+
+        fallback: Optional[BehaviorDiff] = symbolic_diff
+        return replay_concretely(options, pre_args, compare, fallback)
 
     explore_paths(
         run_both,
@@ -290,11 +291,10 @@ def diff_behavior_with_signature(
         on_nondeterminism=on_nondeterminism,
     )
     diffs: List[BehaviorDiff] = []
-    with COMPOSITE_TRACER:
-        for pre_args, symbolic_diff in candidates:
-            diff = replay(pre_args, symbolic_diff)
-            if diff is not None:
-                diffs.append(diff)
+    for pre_args, symbolic_diff in candidates:
+        diff = replay(pre_args, symbolic_diff)
+        if diff is not None:
+            diffs.append(diff)
     return diffs
 
 
