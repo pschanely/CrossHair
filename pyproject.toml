@@ -55,7 +55,7 @@ dev = [
     "pre-commit~=4.3",
     "pytest==9.1.1",
     "pytest-xdist==3.8.0",
-    "ruff==0.17.4",
+    "ruff==0.17.6",
     "setuptools",
     "sphinx>=3.4.3",
     "sphinx-rtd-theme>=0.5.1",
