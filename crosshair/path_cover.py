@@ -66,7 +66,7 @@ def path_cover(
         fn = fn.__wrapped__  # type: ignore
     search_root = RootNode()
 
-    paths: List[Tuple[PathSummary, str]] = []
+    paths: List[PathSummary] = []
     coverage: CoverageTracingModule = CoverageTracingModule(fn)
 
     def run_path(args: BoundArguments):
@@ -92,8 +92,6 @@ def path_cover(
 
             pre_args = deep_realize(pre_args)
             post_args = deep_realize(post_args)
-            with NoTracing():
-                plain_result = eval_friendly_repr(deep_realize(ret))
             ret = reprer.eval_friendly_format(ret, lambda x: builtins.repr(x))
             references = reprer.repr_references
 
@@ -115,7 +113,7 @@ def path_cover(
                 cov,
                 references,
             )
-            paths.append((summary, plain_result))
+            paths.append(summary)
             return
         debug("Skipping path (failed to realize values)", efilter.user_exc)
 
@@ -128,7 +126,7 @@ def path_cover(
         on_nondeterminism=on_nondeterminism,
     )
 
-    def replay(path: PathSummary, plain_result: str) -> PathSummary:
+    def replay(path: PathSummary) -> PathSummary:
         def summarize(args: BoundArguments) -> PathSummary:
             with ExceptionFilter() as efilter:
                 ret = run_path(args)
@@ -144,7 +142,7 @@ def path_cover(
                 )
             with Patched(), EvalFriendlyReprContext() as ctx:
                 result = ctx.cleanup(builtins.repr(ret))
-            if path.exc is None and result == plain_result:
+            if path.exc is None and result == path.result:
                 return replayed
             debug("Concrete replay differs; it returns", result)
             return replace(
@@ -157,14 +155,13 @@ def path_cover(
 
         return replay_concretely(options, path.args, summarize, path)
 
-    paths = [(replay(path, plain_result), plain_result) for path, plain_result in paths]
-    summaries = [path for path, _ in paths]
+    paths = [replay(path) for path in paths]
 
     opcodes_found: Set[int] = set()
     selected: List[PathSummary] = []
-    while summaries:
+    while paths:
         next_best = max(
-            summaries,
+            paths,
             key=lambda p: (
                 len(p.coverage.offsets_covered - opcodes_found),  # high coverage
                 -len(p.formatted_args),  # with small input size
@@ -177,7 +174,7 @@ def path_cover(
                 break
         selected.append(next_best)
         opcodes_found |= cur_offsets
-        summaries = [p for p in summaries if p is not next_best]
+        paths = [p for p in paths if p is not next_best]
     return selected
 
 
