@@ -1,5 +1,6 @@
 import argparse
 import enum
+import json
 import linecache
 import os.path
 import random
@@ -34,6 +35,7 @@ from crosshair.core_and_libs import (
     MessageType,
     analyze_any,
     installed_plugins,
+    list_targets,
     run_checkables,
 )
 from crosshair.diff_behavior import ExceptionEquivalenceType, diff_behavior
@@ -150,6 +152,21 @@ def command_line_parser() -> argparse.ArgumentParser:
         dest="report_verbose",
         action="store_true",
         help="Output context and stack traces for counterexamples",
+    )
+    check_parser.add_argument(
+        "--list_targets",
+        dest="list_targets",
+        action="store_true",
+        help=textwrap.dedent("""\
+        Report every potential target and whether it would be analyzed, plus
+        the reason when it would not be. No solving is performed.
+        """),
+    )
+    check_parser.add_argument(
+        "--json",
+        dest="json",
+        action="store_true",
+        help="With --list_targets, emit the target list as JSON instead of text",
     )
     check_parser.add_argument(
         "target",
@@ -866,6 +883,51 @@ def server(
     cast(Callable[[], NoReturn], create_lsp_server(options).start_io)()
 
 
+def report_targets(
+    entities: Iterable[Union[ModuleType, type, FunctionInfo]],
+    options: AnalysisOptionSet,
+    stdout: TextIO,
+    as_json: bool,
+) -> int:
+    """Print which targets would be analyzed, and why others would not be."""
+    infos = [info for entity in entities for info in list_targets(entity, options)]
+    if as_json:
+        json.dump(
+            {
+                "targets": [
+                    {
+                        "name": info.name,
+                        "filename": info.filename,
+                        "line": info.line,
+                        "checked": info.checked,
+                        "reason": info.reason,
+                    }
+                    for info in infos
+                ]
+            },
+            stdout,
+            indent=2,
+        )
+        stdout.write("\n")
+        return 0
+    if not infos:
+        stdout.write("No potential targets found.\n")
+        return 0
+    for info in infos:
+        if info.checked:
+            stdout.write(f"{info.filename}:{info.line}: info: {info.name}: checked\n")
+        else:
+            stdout.write(
+                f"{info.filename}:{info.line}: info: {info.name}: not checked"
+                f" ({info.reason})\n"
+            )
+    num_checked = sum(1 for info in infos if info.checked)
+    stdout.write(
+        f"{num_checked} of {len(infos)} potential targets would be analyzed.\n"
+    )
+    return 0
+
+
 def check(
     args: argparse.Namespace, options: AnalysisOptionSet, stdout: TextIO, stderr: TextIO
 ) -> int:
@@ -873,6 +935,13 @@ def check(
     entities = checked_load(args.target, stderr)
     if isinstance(entities, int):
         return entities
+    list_targets_only = getattr(args, "list_targets", False)
+    as_json = getattr(args, "json", False)
+    if as_json and not list_targets_only:
+        print("--json is only supported with --list_targets.", file=stderr)
+        return 2
+    if list_targets_only:
+        return report_targets(entities, options, stdout, as_json)
     full_options = DEFAULT_OPTIONS.overlay(report_verbose=False).overlay(options)
     checkables = [c for e in entities for c in analyze_any(e, options)]
     if not checkables:

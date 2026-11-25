@@ -146,7 +146,7 @@ It is more customizable than ``watch`` and produces machine-readable output.
 
     usage: crosshair check [-h] [--verbose] [--extra_plugin FILE [FILE ...]]
                            [--unblock EVENT [EVENT ...]] [--report_all]
-                           [--report_verbose]
+                           [--report_verbose] [--list_targets] [--json]
                            [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
                            [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT] [--analysis_kind KIND]
@@ -183,6 +183,9 @@ It is more customizable than ``watch`` and produces machine-readable output.
                             Finally, `--unblock EVERYTHING` will disable all side-effect detection.
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
+      --list_targets        Report every potential target and whether it would be analyzed, plus
+                            the reason when it would not be. No solving is performed.
+      --json                With --list_targets, emit the target list as JSON instead of text
       --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
                             Maximum number of consecutive iterations to run without making
                             significant progress in exploring the codebase.
@@ -218,6 +221,24 @@ It is more customizable than ``watch`` and produces machine-readable output.
                                 deal       : check deal contracts (decorator-based)
 
 .. Help ends: crosshair check --help
+
+
+Listing targets
+===============
+
+Sometimes it is unclear what ``check`` is analyzing, especially when it finds
+nothing. ``--list_targets`` reports every potential target, whether it would be
+checked, and the reason when it would not. No solving happens, so this is cheap
+to run in CI:
+
+.. code-block:: text
+
+    $ crosshair check mystuff.py --list_targets
+    mystuff.py:4: info: mystuff.fn_with_contract: checked
+    mystuff.py:9: info: mystuff.fn_without_contract: not checked (no postconditions to check)
+    1 of 2 potential targets would be analyzed.
+
+Add ``--json`` for the same information in machine-readable form.
 
 
 Example Uses
