@@ -151,7 +151,7 @@ it can make different decisions on future executions. Ultimately,
 we're looking for some target thing to happen: an exception to be
 raised, or a postcondition to return False. When that happens,
 we ask Z3 for a model and turn it into a counterexample.
-Some values (notably floats) are modeled only approximately, so CrossHair
+Some values are sometimes modeled approximately (notably floats as SMT Reals), so CrossHair
 then calls the function again with these concrete values, and only reports
 the counterexample if it reproduces.
 
