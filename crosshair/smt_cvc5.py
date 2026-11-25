@@ -497,6 +497,8 @@ def to_python(value: ExprRef) -> object:
         return value.getBooleanValue()
     if value.getSort().isReal() and value.isRealValue():
         return float(value.getRealValue())
+    if value.isRealAlgebraicNumber():
+        return float(_approximate_algebraic(value))
     if value.isIntegerValue():
         return numeral_to_int(value)
     if value.isFloatingPointValue():
@@ -507,6 +509,33 @@ def to_python(value: ExprRef) -> object:
     if value.getSort().isInteger():
         raise CrosshairUnsupported("could not realize integer", str(value)[:60])
     raise CrosshairUnsupported("cannot convert SMT value", str(value)[:60])
+
+
+_ALGEBRAIC_BISECTIONS = 64
+
+
+def _approximate_algebraic(value: ExprRef) -> Fraction:
+    """Bisect the isolating interval of a real algebraic number."""
+    variable = tm.mkVar(real_sort, "v")
+    polynomial = value.getRealAlgebraicNumberDefiningPolynomial(variable)
+    low = value.getRealAlgebraicNumberLowerBound().getRealValue()
+    high = value.getRealAlgebraicNumberUpperBound().getRealValue()
+
+    def sign_at(point: Fraction) -> int:
+        at_point = polynomial.substitute(variable, tm.mkReal(str(point)))
+        return _evaluator.simplify(at_point).getRealOrIntegerValueSign()
+
+    low_sign = sign_at(low)
+    for _ in range(_ALGEBRAIC_BISECTIONS):
+        mid = (low + high) / 2
+        mid_sign = sign_at(mid)
+        if mid_sign == 0:
+            return mid
+        if mid_sign == low_sign:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
 
 
 def _free_consts(terms: Iterable[ExprRef], seen: Set[ExprRef]) -> List[ExprRef]:
@@ -531,6 +560,7 @@ def _new_solver(**options: str) -> cvc5.Solver:
     solver = cvc5.Solver(tm)
     solver.setOption("arrays-exp", "true")
     solver.setOption("nl-cov", "true")
+    solver.setOption("nl-ext", "none")
     solver.setOption("incremental", "true")
     for name, value in options.items():
         solver.setOption(name.replace("_", "-"), value)
@@ -546,19 +576,24 @@ class Model:
     def __init__(self, consts: List[ExprRef], values: List[ExprRef]) -> None:
         self._consts = consts
         self._values = values
-        self._known: Set[ExprRef] = set(consts)
+        self._value_of: Dict[ExprRef, ExprRef] = dict(zip(consts, values))
 
     def _complete(self, expr: ExprRef) -> None:
-        missing = [c for c in _free_consts([expr], set()) if c not in self._known]
+        free = _free_consts([expr], set())
+        missing = [c for c in free if c not in self._value_of]
         if not missing:
             return
         _evaluator.checkSat()
+        values = _evaluator.getValue(missing)
         self._consts.extend(missing)
-        self._values.extend(_evaluator.getValue(missing))
-        self._known.update(missing)
+        self._values.extend(values)
+        self._value_of.update(zip(missing, values))
 
     def eval(self, expr: ExprRef) -> ExprRef:
         self._complete(expr)
+        value = self._value_of.get(expr)
+        if value is not None:
+            return value
         ground = expr.substitute(self._consts, self._values)
         simplified = _evaluator.simplify(ground)
         if _is_value(simplified):
