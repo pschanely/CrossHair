@@ -63,6 +63,7 @@ from crosshair.libimpl.builtinslib import (
     RealBasedSymbolicFloat,
     SymbolicArrayBasedUniformTuple,
     SymbolicBool,
+    SymbolicBoundedInt,
     SymbolicBoundedIntTuple,
     SymbolicByteArray,
     SymbolicBytes,
@@ -583,6 +584,27 @@ def test_ieee_smt_comparisons():
     for op in (operator.le, operator.ge, operator.lt, operator.gt):
         assert is_false(smt_ops[op](nan, nan))
         assert is_false(smt_ops[op](nan, one))
+
+
+def test_ieee_abs_is_never_negative(space):
+    with NoTracing():
+        x = PreciseIeeeSymbolicFloat("x")
+    with ResumedTracing():
+        magnitude = abs(x)
+    assert not space.is_possible(smt.fp_is_negative(magnitude.var))
+
+
+@pytest.mark.parametrize(
+    "low,high,abs_low,abs_high",
+    [(None, 5, 0, None), (-7, 3, 0, 7), (-9, -2, 2, 9), (1, None, 1, None)],
+)
+def test_bounded_int_abs_bounds(space, low, high, abs_low, abs_high):
+    with NoTracing():
+        x = SymbolicBoundedInt("x", int, low, high)
+    with ResumedTracing():
+        magnitude = abs(x)
+    assert magnitude._ch_minimum == abs_low
+    assert magnitude._ch_maximum == abs_high
 
 
 @pytest.mark.demo

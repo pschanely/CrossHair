@@ -44,8 +44,9 @@ def make_array(creator: SymbolicFactory) -> object:
     nums = SymbolicArrayBasedUniformTuple(creator.varname, Tuple[int, ...])
     smt_array = nums._arr()
     qvar = smt.const("arrvar" + space.uniq(), smt.int_sort)
-    space.add(smt.forall([qvar], minval <= smt.select(smt_array, qvar)))
-    space.add(smt.forall([qvar], smt.select(smt_array, qvar) < maxval))
+    item = smt.select(smt_array, qvar)
+    space.add(smt.forall([qvar], smt.le(smt.int_val(minval), item)))
+    space.add(smt.forall([qvar], smt.lt(item, smt.int_val(maxval))))
     return SymbolicArray(code, nums)
 
 

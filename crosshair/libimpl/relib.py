@@ -228,6 +228,10 @@ Span = Tuple[int, Union[int, SymbolicInt]]
 Captures = Mapping[int, Span]
 
 
+def _is_newline(codepoint: Union[int, SymbolicInt]) -> smt.ExprRef:
+    return smt.eq(SymbolicInt._coerce_to_smt_sort(codepoint), smt.int_val(ord("\n")))
+
+
 def _traced_binop(a, op, b):
     if isinstance(a, CrossHairValue) or isinstance(b, CrossHairValue):
         with ResumedTracing():
@@ -624,20 +628,20 @@ def _internal_match_patterns(
             )
     elif op is AT:
         if arg in (AT_BEGINNING, AT_BEGINNING_STRING):
-            begins_string = fork_on(SymbolicInt._coerce_to_smt_sort(offset) == 0, 0)
+            begins_string = fork_on(
+                smt.eq(SymbolicInt._coerce_to_smt_sort(offset), smt.int_val(0)), 0
+            )
             if begins_string:
                 return begins_string
             if arg is AT_BEGINNING and re.MULTILINE & flags:
                 with ResumedTracing():
                     prev_char = ord(string[offset - 1])
-                return fork_on(
-                    SymbolicInt._coerce_to_smt_sort(prev_char) == ord("\n"), 0
-                )
+                return fork_on(_is_newline(prev_char), 0)
             return None
         with ResumedTracing():
             remaining_len = len(string) - offset
         ends_string = space.smt_fork(
-            SymbolicInt._coerce_to_smt_sort(remaining_len) <= 0
+            smt.le(SymbolicInt._coerce_to_smt_sort(remaining_len), smt.int_val(0))
         )
         if arg in (AT_END, AT_END_STRING):
             if ends_string:
@@ -645,9 +649,7 @@ def _internal_match_patterns(
             if arg is AT_END and re.MULTILINE & flags:
                 with ResumedTracing():
                     next_char = ord(string[offset])
-                return fork_on(
-                    SymbolicInt._coerce_to_smt_sort(next_char) == ord("\n"), 0
-                )
+                return fork_on(_is_newline(next_char), 0)
             return None
         elif arg in (AT_BOUNDARY, AT_NON_BOUNDARY):
             if ends_string or offset == 0:
@@ -724,8 +726,10 @@ def _internal_match_patterns(
             ]
         same = smt.and_(
             *(
-                SymbolicInt._coerce_to_smt_sort(current_char)
-                == SymbolicInt._coerce_to_smt_sort(previous_char)
+                smt.eq(
+                    SymbolicInt._coerce_to_smt_sort(current_char),
+                    SymbolicInt._coerce_to_smt_sort(previous_char),
+                )
                 for current_char, previous_char in char_pairs
             )
         )
