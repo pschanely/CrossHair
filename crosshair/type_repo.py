@@ -83,22 +83,23 @@ def rebuild_subclass_map():
     _MAP = None
 
 
-MAYBE_SORT = smt.declare_datatype(
-    "optional_bool", {"yes": [], "no": [], "exception": []}
-)
+_MAYBE = smt.declare_datatype("optional_bool", {"yes": [], "no": [], "exception": []})
+_YES = smt.apply(_MAYBE.constructors["yes"])
+_NO = smt.apply(_MAYBE.constructors["no"])
+_EXCEPTION = smt.apply(_MAYBE.constructors["exception"])
 
 
 def _pyissubclass(pytype1: Type, pytype2: Type) -> smt.ExprRef:
     try:
-        return MAYBE_SORT.yes if issubclass(pytype1, pytype2) else MAYBE_SORT.no
+        return _YES if issubclass(pytype1, pytype2) else _NO
     except Exception:
-        return MAYBE_SORT.exception
+        return _EXCEPTION
 
 
 PYTYPE_SORT = smt.declare_sort("pytype_sort")
 
 SMT_SUBTYPE_FN = smt.declare_fun(
-    "pytype_sort_subtype", PYTYPE_SORT, PYTYPE_SORT, MAYBE_SORT
+    "pytype_sort_subtype", PYTYPE_SORT, PYTYPE_SORT, _MAYBE.sort
 )
 
 
@@ -110,10 +111,10 @@ class SymbolicTypeRepository:
         self.solver = solver
 
     def smt_can_subclass(self, typ1: smt.ExprRef, typ2: smt.ExprRef) -> smt.ExprRef:
-        return smt.apply(SMT_SUBTYPE_FN, typ1, typ2) != MAYBE_SORT.exception
+        return smt.distinct(smt.apply(SMT_SUBTYPE_FN, typ1, typ2), _EXCEPTION)
 
     def smt_issubclass(self, typ1: smt.ExprRef, typ2: smt.ExprRef) -> smt.ExprRef:
-        return smt.apply(SMT_SUBTYPE_FN, typ1, typ2) == MAYBE_SORT.yes
+        return smt.eq(smt.apply(SMT_SUBTYPE_FN, typ1, typ2), _YES)
 
     def get_type(self, typ: Type) -> smt.ExprRef:
         with NoTracing():

@@ -230,18 +230,11 @@ def typeable_value(val: object) -> object:
 
 
 @memo
-def possibly_missing_sort(sort):
+def possibly_missing(sort: smt.SortRef) -> smt.Datatype:
     return smt.declare_datatype(
         "optional_" + str(sort) + "_",
         {"missing": [], "present": [("valueat", sort)]},
     )
-
-
-_MAYBE_HEAPREF = possibly_missing_sort(HeapRef)
-
-
-def is_heapref_sort(sort: smt.SortRef) -> bool:
-    return sort == HeapRef or sort == _MAYBE_HEAPREF
 
 
 SymbolicGenerator = Callable[[Union[str, smt.ExprRef], type], object]
@@ -495,7 +488,7 @@ def smt_to_ch_value(
     if isinstance(pytype, SymbolicType):
         pytype = realize(pytype)
 
-    if smt_val.sort() == HeapRef:
+    if smt.sort_of(smt_val) == HeapRef:
         if heap is None:
             raise CrossHairInternal("HeapRef value without a heap")
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, heap)
@@ -1451,7 +1444,7 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
 
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type = int):
         assert typ == int
-        if (not isinstance(smtvar, str)) and (not smtvar.is_int()):
+        if (not isinstance(smtvar, str)) and (not smt.has_int_sort(smtvar)):
             raise CrossHairInternal(
                 f"non-integer SMT value given to SymbolicInt ({smtvar})"
             )
@@ -2056,12 +2049,12 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
         SymbolicDictOrSet.__init__(self, smtvar, typ)
         arr_var = self._arr()
         len_var = self._len()
-        self.val_missing_checker = arr_var.sort().range().recognizer(0)
-        self.val_missing_constructor = arr_var.sort().range().constructor(0)
-        self.val_constructor = arr_var.sort().range().constructor(1)
-        self.val_accessor = arr_var.sort().range().accessor(1, 0)
+        maybe_val = possibly_missing(self.smt_val_sort)
+        self.val_missing_checker = maybe_val.recognizers["missing"]
+        self.val_constructor = maybe_val.constructors["present"]
+        self.val_accessor = maybe_val.accessors["valueat"]
         self.empty = smt.const_array(
-            arr_var.sort().domain(), smt.apply(self.val_missing_constructor)
+            self.smt_key_sort, smt.apply(maybe_val.constructors["missing"])
         )
         self._iter_cache: List[smt.ExprRef] = []
         space.add((arr_var == self.empty) == (len_var == 0))
@@ -2077,7 +2070,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
     def __init_var__(self, typ, varname):
         assert typ == self.python_type
         arr_smt_sort = smt.array_sort(
-            self.smt_key_sort, possibly_missing_sort(self.smt_val_sort)
+            self.smt_key_sort, possibly_missing(self.smt_val_sort).sort
         )
         space = context_statespace()
         return (
@@ -2107,10 +2100,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
 
     def __eq__(self, other):
         self_arr, self_len = self.var
-        has_heapref = is_heapref_sort(self.var[0].sort().domain()) or is_heapref_sort(
-            self.var[0].sort().range()
-        )
-        if not has_heapref:
+        if HeapRef not in (self.smt_key_sort, self.smt_val_sort):
             if isinstance(other, SymbolicDict):
                 other_arr, other_len = other.var
                 return SymbolicBool(
@@ -2172,10 +2162,10 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             iter_cache = self._iter_cache
             space = context_statespace()
             idx = 0
-            arr_sort = self._arr().sort()
-            key_sort = arr_sort.domain()
+            key_sort = self.smt_key_sort
+            arr_sort = smt.array_sort(key_sort, possibly_missing(self.smt_val_sort).sort)
             val_constructor = self.val_constructor
-            val_sort = val_constructor.domain(0)
+            val_sort = self.smt_val_sort
             is_missing = self.val_missing_checker
             while SymbolicBool(smt.gt(len_var, smt.int_val(idx))).__bool__():
                 if space.choose_possible(
@@ -2221,7 +2211,7 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
             raise CrossHairInternal
         SymbolicDictOrSet.__init__(self, smtvar, typ)
         self._iter_cache: List[smt.ExprRef] = []
-        self.empty = smt.const_array(self._arr().sort().domain(), smt.false)
+        self.empty = smt.const_array(self.smt_key_sort, smt.false)
         space = context_statespace()
         space.add((self._arr() == self.empty) == (self._len() == 0))
         space.defer_assumption("symbolic set is consistent", self._is_consistent)
@@ -2286,7 +2276,7 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
         self_arr, self_len = self.var
         if isinstance(other, SymbolicFrozenSet):
             other_arr, other_len = other.var
-            if other_arr.sort() == self_arr.sort():
+            if other.smt_key_sort == self.smt_key_sort:
                 # TODO: this is wrong for HeapRef sets (which could customize __eq__)
                 return SymbolicBool(
                     smt.and_(self_len == other_len, self_arr == other_arr)
@@ -2345,9 +2335,9 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
             iter_cache = self._iter_cache
             space = context_statespace()
             idx = 0
-            arr_sort = self._arr().sort()
-            key_sort = arr_sort.domain()
-            keys_on_heap = is_heapref_sort(key_sort)
+            key_sort = self.smt_key_sort
+            arr_sort = smt.array_sort(key_sort, smt.bool_sort)
+            keys_on_heap = key_sort == HeapRef
             already_yielded = []
             while True:
                 if idx < len(iter_cache):
@@ -2597,8 +2587,8 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             self_arr, self_len = self.var
             if (
                 isinstance(other, SymbolicArrayBasedUniformTuple)
-                and self.item_smt_sort is not HeapRef
-                and self_arr.sort() == other._arr().sort()
+                and self.item_smt_sort != HeapRef
+                and self.item_smt_sort == other.item_smt_sort
             ):
                 return SymbolicBool(
                     smt.and_(self_len == other._len(), self_arr == other._arr())
@@ -2678,7 +2668,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
     def __contains__(self, other):
         space = context_statespace()
         with NoTracing():
-            if not is_heapref_sort(self.item_smt_sort):
+            if self.item_smt_sort != HeapRef:
                 smt_other = self.ch_item_type._coerce_to_smt_sort(other)
                 if smt_other is not None:
                     # OK to perform a symbolic comparison

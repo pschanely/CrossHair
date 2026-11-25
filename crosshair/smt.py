@@ -7,7 +7,7 @@ use the ``*_val`` functions to build literals.
 
 import ast
 from fractions import Fraction
-from typing import Dict, List, Optional, Sequence, Tuple, cast
+from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple, cast
 
 import z3  # type: ignore
 from z3 import (
@@ -119,9 +119,18 @@ def declare_sort(name: str) -> SortRef:
     return z3.DeclareSort(name, ctx)
 
 
+class Datatype(NamedTuple):
+    sort: SortRef
+    constructors: Dict[str, FuncDeclRef]
+    recognizers: Dict[str, FuncDeclRef]
+    """Maps each constructor name to its recognizer."""
+    accessors: Dict[str, FuncDeclRef]
+    """Maps each field name to its accessor."""
+
+
 def declare_datatype(
     name: str, constructors: Dict[str, Sequence[Tuple[str, SortRef]]]
-) -> SortRef:
+) -> Datatype:
     """
     Declare an algebraic datatype.
 
@@ -130,7 +139,17 @@ def declare_datatype(
     datatype = z3.Datatype(name, ctx)
     for constructor_name, fields in constructors.items():
         datatype.declare(constructor_name, *fields)
-    return datatype.create()
+    sort = datatype.create()
+    accessors = {}
+    for idx, fields in enumerate(constructors.values()):
+        for field_idx, (field_name, _) in enumerate(fields):
+            accessors[field_name] = sort.accessor(idx, field_idx)
+    return Datatype(
+        sort,
+        {n: sort.constructor(i) for i, n in enumerate(constructors)},
+        {n: sort.recognizer(i) for i, n in enumerate(constructors)},
+        accessors,
+    )
 
 
 # Rounding modes
@@ -479,18 +498,6 @@ def real_to_fp(rounding_mode: ExprRef, expr: ExprRef, sort: SortRef) -> FPRef:
     )
 
 
-def has_bool_sort(expr: ExprRef) -> bool:
-    return z3.is_bool(expr)
-
-
-def has_real_sort(expr: ExprRef) -> bool:
-    return z3.is_real(expr)
-
-
-def has_fp_sort(expr: ExprRef) -> bool:
-    return z3.is_fp(expr)
-
-
 # Quantifiers
 
 
@@ -509,6 +516,26 @@ def exists(variables: Sequence[ExprRef], body: ExprRef) -> BoolRef:
 
 
 # Term inspection
+
+
+def sort_of(expr: ExprRef) -> SortRef:
+    return expr.sort()
+
+
+def has_bool_sort(expr: ExprRef) -> bool:
+    return z3.is_bool(expr)
+
+
+def has_int_sort(expr: ExprRef) -> bool:
+    return z3.is_int(expr)
+
+
+def has_real_sort(expr: ExprRef) -> bool:
+    return z3.is_real(expr)
+
+
+def has_fp_sort(expr: ExprRef) -> bool:
+    return z3.is_fp(expr)
 
 
 def is_same_term(a: ExprRef, b: ExprRef) -> bool:
