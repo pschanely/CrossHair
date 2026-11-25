@@ -292,7 +292,7 @@ def power(base: ExprRef, exponent: ExprRef) -> ExprRef:
         count = numeral_to_int(_as_int_value(exponent))
         if 0 <= count <= _MAX_EXPANDED_EXPONENT:
             return _mk_nary(Kind.MULT, [base] * count, tm.mkReal(1))
-    return _mk(Kind.POW, base, _as_real(exponent))
+    raise CrosshairUnsupported("cvc5 backend needs a small natural exponent")
 
 
 def _as_int_value(value: ExprRef) -> ExprRef:
@@ -623,6 +623,10 @@ def model_satisfies(model: Model, expr: ExprRef) -> bool:
 # Solvers
 
 
+# cvc5's incomplete nonlinear strategies can search forever without a limit:
+_MAX_CHECK_MILLISECONDS = 10_000
+
+
 class Solver:
     """
     An incremental, deterministic solver.
@@ -633,7 +637,9 @@ class Solver:
     assertion_version: int = 0
 
     def __init__(self) -> None:
-        self._solver = _new_solver(produce_models="true", seed="42")
+        self._solver = _new_solver(
+            produce_models="true", seed="42", tlimit_per=str(_MAX_CHECK_MILLISECONDS)
+        )
         self._seen: Set[ExprRef] = set()
         self._consts: List[ExprRef] = []
 
@@ -675,8 +681,9 @@ class Solver:
         return list(self._solver.getAssertions())
 
     def set_timeout(self, milliseconds: int) -> None:
-        """Limit the wall-clock time of each check."""
-        self._solver.setOption("tlimit-per", str(milliseconds))
+        """Limit the wall-clock time of each check (to at most ten seconds)."""
+        limit = min(milliseconds, _MAX_CHECK_MILLISECONDS)
+        self._solver.setOption("tlimit-per", str(limit))
 
     def set_rlimit(self, rlimit: int) -> None:
         """Ignored: cvc5 resource units are not comparable to z3's."""
