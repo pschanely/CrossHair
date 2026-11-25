@@ -102,13 +102,13 @@ from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
     UNABLE_TO_REPR_TEXT,
     AttributeHolder,
-    ControlFlowException,
     CrossHairInternal,
     CrosshairUnsupported,
     CrossHairValue,
     EvalFriendlyReprContext,
     IdKeyedDict,
     IgnoreAttempt,
+    NoStateSpace,
     NotDeterministic,
     ReferencedIdentifier,
     UnexploredPath,
@@ -2074,14 +2074,15 @@ def replay_concretely(
 
     Objects that cannot be copied are shared with `args`.
 
-    Returns `fallback` when the call raises a `ControlFlowException`.
+    Returns `fallback` when the call encounters a symbolic value, or raises
+    `IgnoreAttempt` or `UnexploredPath`.
     """
     debug("Replaying with concrete arguments")
     copied = deepcopyext(args, CopyMode.BEST_EFFORT, {})
     try:
         with condition_parser(options.analysis_kind), COMPOSITE_TRACER:
             return run(copied)
-    except ControlFlowException as exc:
+    except (NoStateSpace, IgnoreAttempt, UnexploredPath) as exc:
         debug("Unable to replay concretely:", type(exc).__name__, exc)
         return fallback
 

@@ -45,6 +45,7 @@ from crosshair.util import (
     CROSSHAIR_SMT_RLIMIT,
     CrossHairInternal,
     IgnoreAttempt,
+    NoStateSpace,
     NotDeterministic,
     PathTimeout,
     UnknownSatisfiability,
@@ -300,7 +301,7 @@ def optional_context_statespace() -> Optional["StateSpace"]:
 def context_statespace() -> "StateSpace":
     space = _THREAD_LOCALS.space
     if space is None:
-        raise CrossHairInternal("Not in a statespace context")
+        raise NoStateSpace("Not in a statespace context")
     return space
 
 

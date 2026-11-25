@@ -696,6 +696,10 @@ class CrossHairInternal(ControlFlowException):
                     debug("", line)
 
 
+class NoStateSpace(CrossHairInternal):
+    pass
+
+
 class UnexploredPath(ControlFlowException):
     pass
 

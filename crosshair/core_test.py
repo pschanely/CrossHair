@@ -1786,3 +1786,15 @@ def test_float_precondition_unmet_by_real_floats() -> None:
 
     check_states(f, POST_FAIL)
 
+
+def test_refutation_is_kept_when_replay_reads_a_symbolic() -> None:
+    seen = []
+
+    def f(x: int) -> int:
+        """
+        post: _ != 7
+        """
+        seen.append(x)
+        return seen[0]
+
+    check_states(f, POST_FAIL)
