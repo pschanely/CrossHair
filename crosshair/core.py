@@ -261,7 +261,7 @@ class ExceptionFilter:
                 if isinstance(
                     exc_value,
                     (
-                        smt.Z3Exception,  # internal issue, re-raise
+                        smt.SolverError,  # internal issue, re-raise
                         NotDeterministic,  # cannot continue to use the solver, re-raise
                     ),
                 ):
