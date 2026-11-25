@@ -1774,7 +1774,7 @@ def check_call(
     enforced_conditions: EnforcedConditions,
 ) -> CallOutcome:
     """
-    Call a copy of the given arguments and check the function's contract.
+    Call the function with copies of the given arguments, checking its contract.
 
     Exceptions are captured in the outcome; values in it are not realized.
     """
