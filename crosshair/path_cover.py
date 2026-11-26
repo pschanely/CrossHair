@@ -66,7 +66,6 @@ def path_cover(
         fn = fn.__wrapped__  # type: ignore
     search_root = RootNode()
 
-    paths: List[PathSummary] = []
     coverage: CoverageTracingModule = CoverageTracingModule(fn)
 
     def run_path(args: BoundArguments):
@@ -83,7 +82,7 @@ def path_cover(
         ret,
         exc: Optional[BaseException],
         exc_stack: Optional[traceback.StackSummary],
-    ) -> None:
+    ) -> Optional[PathSummary]:
         with ExceptionFilter() as efilter:
             space.detach_path()
 
@@ -103,7 +102,7 @@ def path_cover(
                 exc_message = realize(str(exc)) if len(exc.args) > 0 else None
             else:
                 debug("Realized return:", ret)
-            summary = PathSummary(
+            return PathSummary(
                 pre_args,
                 formatted_pre_args,
                 ret,
@@ -113,19 +112,19 @@ def path_cover(
                 cov,
                 references,
             )
-            paths.append(summary)
-            return
         debug("Skipping path (failed to realize values)", efilter.user_exc)
+        return None
 
-    for _ in explore_paths(
-        run_path,
-        sig,
-        options,
-        search_root,
-        on_path_complete,
-        on_nondeterminism=on_nondeterminism,
-    ):
-        pass
+    paths: List[PathSummary] = list(
+        explore_paths(
+            run_path,
+            sig,
+            options,
+            search_root,
+            on_path_complete,
+            on_nondeterminism=on_nondeterminism,
+        )
+    )
 
     def replay(path: PathSummary) -> PathSummary:
         def summarize(args: BoundArguments) -> PathSummary:

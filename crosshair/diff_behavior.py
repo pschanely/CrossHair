@@ -195,7 +195,6 @@ def diff_behavior_with_signature(
     on_nondeterminism: Optional[Callable[[], None]] = None,
 ) -> Iterable[BehaviorDiff]:
     search_root = RootNode()
-    candidates: List[Tuple[inspect.BoundArguments, BehaviorDiff]] = []
 
     def run_both(args1: inspect.BoundArguments) -> _ExecutionPair:
         args2 = copy.deepcopy(args1)
@@ -247,27 +246,27 @@ def diff_behavior_with_signature(
         run: Optional[_ExecutionPair],
         exc: Optional[BaseException],
         exc_stack: Optional[traceback.StackSummary],
-    ) -> None:
+    ) -> Optional[Tuple[inspect.BoundArguments, BehaviorDiff]]:
         if run is None:
-            return
+            return None
         with ExceptionFilter() as efilter:
             if is_equivalent(args1, run):
                 # Functions are equivalent if both have the same result,
                 # and deemed to have the same kind of error.
                 space.detach_path()
                 debug("Functions equivalent")
-                return
+                return None
             space.detach_path()
             debug("Functions differ")
             diff = describe_diff(pre_args, args1, run)
-            candidates.append((deep_realize(pre_args), diff))
-            return
+            return (deep_realize(pre_args), diff)
         if efilter.user_exc:
             debug(
                 "User-level exception found",
                 repr(efilter.user_exc[0]),
                 efilter.user_exc[1],
             )
+        return None
 
     def replay(
         pre_args: inspect.BoundArguments, symbolic_diff: BehaviorDiff
@@ -282,15 +281,16 @@ def diff_behavior_with_signature(
         fallback: Optional[BehaviorDiff] = symbolic_diff
         return replay_concretely(options, pre_args, compare, fallback)
 
-    for _ in explore_paths(
-        run_both,
-        sig,
-        options,
-        search_root,
-        on_path_complete,
-        on_nondeterminism=on_nondeterminism,
-    ):
-        pass
+    candidates: List[Tuple[inspect.BoundArguments, BehaviorDiff]] = list(
+        explore_paths(
+            run_both,
+            sig,
+            options,
+            search_root,
+            on_path_complete,
+            on_nondeterminism=on_nondeterminism,
+        )
+    )
     diffs: List[BehaviorDiff] = []
     for pre_args, symbolic_diff in candidates:
         diff = replay(pre_args, symbolic_diff)
