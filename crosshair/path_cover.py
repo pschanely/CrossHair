@@ -117,14 +117,15 @@ def path_cover(
             return
         debug("Skipping path (failed to realize values)", efilter.user_exc)
 
-    explore_paths(
+    for _ in explore_paths(
         run_path,
         sig,
         options,
         search_root,
         on_path_complete,
         on_nondeterminism=on_nondeterminism,
-    )
+    ):
+        pass
 
     def replay(path: PathSummary) -> PathSummary:
         def summarize(args: BoundArguments) -> PathSummary:

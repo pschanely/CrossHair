@@ -30,7 +30,9 @@ from typing import (
     Collection,
     Dict,
     FrozenSet,
+    Generic,
     Iterable,
+    Iterator,
     List,
     Mapping,
     MutableMapping,
@@ -1336,7 +1338,9 @@ def analyze_calltree(
         interceptor=short_circuit.make_interceptor,
     )
 
-    def run_path(space: StateSpace) -> PathOutcome:
+    def run_path(
+        space: StateSpace,
+    ) -> PathOutcome[Tuple[CallAnalysis, ConcreteRefutation]]:
         nonlocal failing_precondition, failing_precondition_reason
         nonlocal num_confirmed_paths
         try:
@@ -1390,19 +1394,16 @@ def analyze_calltree(
             )
         return PathOutcome(call_analysis)
 
-    def is_reproducible(candidate: Tuple[CallAnalysis, ConcreteRefutation]) -> bool:
-        _, refutation = candidate
-        return replay_refutation(
+    exploration = Exploration(options, search_root, run_path)
+    top_analysis: Optional[CallAnalysis] = None
+    for call_analysis, refutation in exploration:
+        if replay_refutation(
             conditions, refutation, options, short_circuit, enforced_conditions
-        )
-
-    exploration = explore_loop(options, search_root, run_path, is_reproducible)
+        ):
+            top_analysis = call_analysis
+            break
     space_exhausted = exploration.exhausted
-    if exploration.accepted_candidate is not None:
-        top_analysis, _ = cast(
-            Tuple[CallAnalysis, ConcreteRefutation], exploration.accepted_candidate
-        )
-    else:
+    if top_analysis is None:
         top_analysis = search_root.child.get_result()
     if top_analysis.messages:
         all_messages.extend(
@@ -1464,115 +1465,125 @@ PathCompeltionCallback = Callable[
 
 
 @dataclass
-class PathOutcome:
+class PathOutcome(Generic[_T]):
     """
     The result of exploring one path.
 
     `analysis` is bubbled into the search tree; `breakout` requests that the
-    exploration stop after this path. A `candidate` pauses the exploration, and
-    is given to the exploration's `consider_candidate` callback.
+    exploration stop after this path. A `candidate` pauses the exploration and
+    is yielded to the exploration's consumer.
     """
 
     analysis: CallAnalysis
     breakout: bool = False
-    candidate: object = None
+    candidate: Optional[_T] = None
 
 
-@dataclass
-class ExplorationResult:
-    top_analysis: Optional[CallAnalysis]
-    exhausted: bool
-    iterations: int
-    accepted_candidate: object = None
-
-
-def explore_loop(
-    options: AnalysisOptions,
-    search_root: RootNode,
-    run_path: Callable[[StateSpace], PathOutcome],
-    consider_candidate: Callable[[Any], bool] = lambda candidate: True,
-) -> ExplorationResult:
+class Exploration(Generic[_T]):
     """
-    The shared per-path exploration loop.
+    The shared per-path exploration loop, iterated for its candidates.
 
     Repeatedly builds a StateSpace and runs `run_path`, which returns the
     CallAnalysis to bubble into the search tree (and may request an early stop).
     Classifies the control-flow exceptions (`IgnoreAttempt`, `UnexploredPath`)
     uniformly; anything else (including `NotDeterministic`) is `run_path`'s to
-    handle. Stops on caller breakout, a candidate that `consider_candidate`
-    accepts, path exhaustion, the per-condition timeout, the iteration cap, or
-    too many uninteresting iterations. `consider_candidate` runs outside of any
-    StateSpace and without symbolic patches.
+    handle. Stops on caller breakout, path exhaustion, the per-condition timeout,
+    the iteration cap, or too many uninteresting iterations.
+
+    Iterating yields each candidate outside of any StateSpace and without
+    symbolic patches; exploration resumes when the consumer asks for the next
+    one. `top_analysis`, `exhausted`, and `iterations` describe the
+    exploration so far.
     """
-    condition_start = process_time()
-    max_uninteresting_iterations = options.get_max_uninteresting_iterations()
-    top_analysis: Optional[CallAnalysis] = None
-    exhausted = False
-    i = 0
-    while True:
-        candidate = None
-        with Patched():
-            while i < options.max_iterations:
-                i += 1
-                debug("Iteration ", i)
-                itr_start = process_time()
-                if itr_start > condition_start + options.per_condition_timeout:
-                    debug(
-                        "Stopping due to --per_condition_timeout=",
-                        options.per_condition_timeout,
-                    )
-                    break
-                options.incr("num_paths")
-                per_path_timeout = options.get_per_path_timeout()
-                space = StateSpace(
-                    execution_deadline=itr_start + per_path_timeout,
-                    model_check_timeout=per_path_timeout / 2,
-                    search_root=search_root,
-                )
-                with (
-                    condition_parser(options.analysis_kind),
-                    COMPOSITE_TRACER,
-                    NoTracing(),
-                    StateSpaceContext(space),
-                ):
-                    try:
-                        outcome = run_path(space)
-                    except IgnoreAttempt:
-                        outcome = PathOutcome(CallAnalysis())
-                    except UnexploredPath:
-                        outcome = PathOutcome(CallAnalysis(VerificationStatus.UNKNOWN))
-                    debug("Verification status:", outcome.analysis.verification_status)
-                    top_analysis, exhausted = space.bubble_status(outcome.analysis)
-                    debug("Path tree stats", search_root.stats())
-                    if outcome.breakout:
-                        break
-                    if outcome.candidate is not None:
-                        candidate = outcome.candidate
-                        break
-                    if exhausted:
-                        options.incr("exhaustion")
-                        debug("Stopping due to path exhaustion")
-                        break
-                    if max_uninteresting_iterations != sys.maxsize:
-                        iters_since_discovery = getattr(
-                            search_root.pathing_oracle, "iters_since_discovery"
+
+    def __init__(
+        self,
+        options: AnalysisOptions,
+        search_root: RootNode,
+        run_path: Callable[[StateSpace], PathOutcome[_T]],
+    ):
+        self.options = options
+        self.search_root = search_root
+        self.run_path = run_path
+        self.top_analysis: Optional[CallAnalysis] = None
+        self.exhausted = False
+        self.iterations = 0
+
+    def __iter__(self) -> Iterator[_T]:
+        options = self.options
+        search_root = self.search_root
+        condition_start = process_time()
+        max_uninteresting_iterations = options.get_max_uninteresting_iterations()
+        while True:
+            candidate: Optional[_T] = None
+            with Patched():
+                while self.iterations < options.max_iterations:
+                    self.iterations += 1
+                    debug("Iteration ", self.iterations)
+                    itr_start = process_time()
+                    if itr_start > condition_start + options.per_condition_timeout:
+                        debug(
+                            "Stopping due to --per_condition_timeout=",
+                            options.per_condition_timeout,
                         )
-                        assert isinstance(iters_since_discovery, int)
-                        debug("iters_since_discovery", iters_since_discovery)
-                        if iters_since_discovery > max_uninteresting_iterations:
-                            debug(
-                                "Stopping due to --max_uninteresting_iterations=",
-                                max_uninteresting_iterations,
+                        break
+                    options.incr("num_paths")
+                    per_path_timeout = options.get_per_path_timeout()
+                    space = StateSpace(
+                        execution_deadline=itr_start + per_path_timeout,
+                        model_check_timeout=per_path_timeout / 2,
+                        search_root=search_root,
+                    )
+                    with (
+                        condition_parser(options.analysis_kind),
+                        COMPOSITE_TRACER,
+                        NoTracing(),
+                        StateSpaceContext(space),
+                    ):
+                        outcome: PathOutcome[_T]
+                        try:
+                            outcome = self.run_path(space)
+                        except IgnoreAttempt:
+                            outcome = PathOutcome(CallAnalysis())
+                        except UnexploredPath:
+                            outcome = PathOutcome(
+                                CallAnalysis(VerificationStatus.UNKNOWN)
                             )
+                        debug(
+                            "Verification status:",
+                            outcome.analysis.verification_status,
+                        )
+                        self.top_analysis, self.exhausted = space.bubble_status(
+                            outcome.analysis
+                        )
+                        debug("Path tree stats", search_root.stats())
+                        if outcome.breakout:
                             break
-        if candidate is None:
-            break
-        if consider_candidate(candidate):
-            return ExplorationResult(top_analysis, exhausted, i, candidate)
-        debug("Resuming exploration after candidate")
-        if exhausted:
-            break
-    return ExplorationResult(top_analysis, exhausted, i)
+                        if outcome.candidate is not None:
+                            candidate = outcome.candidate
+                            break
+                        if self.exhausted:
+                            options.incr("exhaustion")
+                            debug("Stopping due to path exhaustion")
+                            break
+                        if max_uninteresting_iterations != sys.maxsize:
+                            iters_since_discovery = getattr(
+                                search_root.pathing_oracle, "iters_since_discovery"
+                            )
+                            assert isinstance(iters_since_discovery, int)
+                            debug("iters_since_discovery", iters_since_discovery)
+                            if iters_since_discovery > max_uninteresting_iterations:
+                                debug(
+                                    "Stopping due to --max_uninteresting_iterations=",
+                                    max_uninteresting_iterations,
+                                )
+                                break
+            if candidate is None:
+                return
+            yield candidate
+            debug("Resuming exploration after candidate")
+            if self.exhausted:
+                return
 
 
 def explore_paths(
@@ -1582,14 +1593,12 @@ def explore_paths(
     search_root: RootNode,
     on_path_complete: PathCompeltionCallback = (lambda *a: None),
     on_nondeterminism: Optional[Callable[[], None]] = None,
-    consider_candidate: Callable[[Any], bool] = lambda candidate: True,
-) -> None:
+) -> Exploration:
     """
-    Runs a path exploration for use cases beyond invariant checking.
+    Creates a path exploration for use cases beyond invariant checking.
 
-    `on_path_complete` may return a candidate (anything but None); exploration
-    then pauses to call `consider_candidate` outside of any StateSpace, and
-    stops if it returns True.
+    Iterating the exploration yields each candidate (anything but None) that
+    `on_path_complete` returns.
 
     On a nondeterministic path, if `on_nondeterminism` is supplied it is called
     and exploration continues (the path is ignored); otherwise NotDeterministic
@@ -1624,7 +1633,7 @@ def explore_paths(
             CallAnalysis(VerificationStatus.CONFIRMED), candidate=candidate
         )
 
-    explore_loop(options, search_root, run_path, consider_candidate)
+    return Exploration(options, search_root, run_path)
 
 
 def make_counterexample_message(

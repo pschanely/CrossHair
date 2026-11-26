@@ -282,14 +282,15 @@ def diff_behavior_with_signature(
         fallback: Optional[BehaviorDiff] = symbolic_diff
         return replay_concretely(options, pre_args, compare, fallback)
 
-    explore_paths(
+    for _ in explore_paths(
         run_both,
         sig,
         options,
         search_root,
         on_path_complete,
         on_nondeterminism=on_nondeterminism,
-    )
+    ):
+        pass
     diffs: List[BehaviorDiff] = []
     for pre_args, symbolic_diff in candidates:
         diff = replay(pre_args, symbolic_diff)

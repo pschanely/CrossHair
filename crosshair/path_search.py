@@ -187,23 +187,20 @@ def path_search(
         fallback: Optional[int] = example.score
         return replay_concretely(options, example.args, score_call, fallback)
 
-    def accept_example(example: _Example) -> bool:
-        nonlocal best_score
-        score = concrete_score(example)
-        if score is None or (best_score is not None and score >= best_score):
-            debug("Rejecting example with concrete score", score)
-            return False
-        best_score = score
-        debug("For input:", example.formatted_args)
-        on_example(example.formatted_args)
-        return best_score == 0
-
-    explore_paths(
+    for example in explore_paths(
         lambda ba: fn(*ba.args, **ba.kwargs),
         sig,
         options,
         search_root,
         on_path_complete,
         on_nondeterminism=on_nondeterminism,
-        consider_candidate=accept_example,
-    )
+    ):
+        score = concrete_score(example)
+        if score is None or (best_score is not None and score >= best_score):
+            debug("Rejecting example with concrete score", score)
+            continue
+        best_score = score
+        debug("For input:", example.formatted_args)
+        on_example(example.formatted_args)
+        if best_score == 0:
+            break
