@@ -7,7 +7,7 @@ import pytest
 
 from crosshair.main import command_line_parser
 from crosshair.options import option_set_from_dict
-from crosshair.statespace import MessageType
+from crosshair.statespace import AnalysisMessage, MessageType
 from crosshair.test_util import simplefs
 from crosshair.watcher import Watcher
 
@@ -184,3 +184,30 @@ def test_result_from_finished_worker_is_not_dropped(tmp_path: Path):
     assert watcher.check_changed()
     watcher._next_file_check = time.time() + 1_000
     assert list(watcher.run_iteration()) == [(Counter(), [])]
+
+
+class SaveDuringAnalysisPool(LateResultPool):
+    """The analyzed file is rewritten after the worker starts."""
+
+    def submit(self, item):
+        filename = item[0]
+        message = AnalysisMessage(
+            MessageType.POST_FAIL, "stale", str(filename), 3, 0, ""
+        )
+        self.running.append((filename, Counter(), [message]))
+        time.sleep(0.01)  # Ensure mtime is actually different!
+        filename.write_text(BUGGY_FOO["foo.py"])
+
+
+class SaveDuringAnalysisWatcher(Watcher):
+    def startpool(self):
+        return SaveDuringAnalysisPool()
+
+
+def test_result_for_file_changed_during_analysis_is_dropped(tmp_path: Path):
+    simplefs(tmp_path, CORRECT_FOO)
+    watcher = SaveDuringAnalysisWatcher([tmp_path])
+    assert watcher.check_changed()
+    watcher._next_file_check = time.time() + 1_000
+    assert list(watcher.run_iteration()) == [(Counter(), [])]
+    assert watcher._change_flag

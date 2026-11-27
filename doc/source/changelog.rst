@@ -6,6 +6,8 @@ Changelog
 Next Version
 ---------------
 
+ * ``crosshair watch`` and the language server no longer report results for a
+   file that was modified while it was being analyzed.
  * Faster solving for integer true division (``int / int``) under the
    IEEE float representation. The overflow check is now a linear integer
    comparison instead of a float conversion.

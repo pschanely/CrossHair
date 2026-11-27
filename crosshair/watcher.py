@@ -242,7 +242,10 @@ class Watcher:
         )
         debug("Files:", self._modtimes.keys())
         pool = self._pool
-        for filename, _ in sorted(self._modtimes.items(), key=lambda pair: -pair[1]):
+        submitted_modtimes = self._modtimes.copy()
+        for filename, _ in sorted(
+            submitted_modtimes.items(), key=lambda pair: -pair[1]
+        ):
             worker_timeout = max(
                 10.0, max_uninteresting_iterations * 1_000.0
             )  # TODO: times 1000? is that right?
@@ -262,10 +265,14 @@ class Watcher:
         while pool.is_working() or pool.has_result():
             result = pool.get_result(timeout=1.0)
             if result is not None:
-                _, counters, messages = result
-                yield (counters, messages)
-                if pool.has_result():
-                    continue
+                filename, counters, messages = result
+                if mtime(filename) == submitted_modtimes.get(filename):
+                    yield (counters, messages)
+                    if pool.has_result():
+                        continue
+                else:
+                    debug("Discarding results for a file changed during analysis")
+                    self._next_file_check = 0.0
             if self.handle_periodic():
                 yield (Counter(), [])  # to break the parent from waiting
                 return
