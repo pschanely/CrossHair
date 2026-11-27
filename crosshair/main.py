@@ -30,12 +30,12 @@ from typing import (
 
 from crosshair import env_info
 from crosshair.auditwall import disable_auditwall, engage_auditwall
+from crosshair.core import Checkable, CheckTarget
 from crosshair.core_and_libs import (
     AnalysisMessage,
     MessageType,
     analyze_any,
     installed_plugins,
-    list_targets,
     run_checkables,
 )
 from crosshair.diff_behavior import ExceptionEquivalenceType, diff_behavior
@@ -884,67 +884,55 @@ def server(
 
 
 def report_targets(
-    entities: Iterable[Union[ModuleType, type, FunctionInfo]],
-    options: AnalysisOptionSet,
-    stdout: TextIO,
-    as_json: bool,
-) -> int:
+    checkables: Iterable[Checkable], stdout: TextIO, as_json: bool
+) -> None:
     """Print which targets would be analyzed, and why others would not be."""
-    infos = [info for entity in entities for info in list_targets(entity, options)]
+    skip_reasons: Dict[CheckTarget, Optional[str]] = {}
+    for checkable in checkables:
+        target, reason = checkable.target(), checkable.skip_reason()
+        if reason is None or target not in skip_reasons:
+            skip_reasons[target] = reason
     if as_json:
-        json.dump(
+        targets = [
             {
-                "targets": [
-                    {
-                        "name": info.name,
-                        "filename": info.filename,
-                        "line": info.line,
-                        "checked": info.checked,
-                        "reason": info.reason,
-                    }
-                    for info in infos
-                ]
-            },
-            stdout,
-            indent=2,
-        )
+                "name": target.name,
+                "filename": target.filename,
+                "line": target.line,
+                "checked": reason is None,
+                "reason": reason or "",
+            }
+            for target, reason in skip_reasons.items()
+        ]
+        json.dump({"targets": targets}, stdout, indent=2)
         stdout.write("\n")
-        return 0
-    if not infos:
-        stdout.write("No potential targets found.\n")
-        return 0
-    for info in infos:
-        if info.checked:
-            stdout.write(f"{info.filename}:{info.line}: info: {info.name}: checked\n")
-        else:
-            stdout.write(
-                f"{info.filename}:{info.line}: info: {info.name}: not checked"
-                f" ({info.reason})\n"
-            )
-    num_checked = sum(1 for info in infos if info.checked)
+        return
+    for target, reason in skip_reasons.items():
+        status = "checked" if reason is None else f"not checked ({reason})"
+        stdout.write(
+            f"{target.filename}:{target.line}: info: {target.name}: {status}\n"
+        )
+    num_checked = sum(reason is None for reason in skip_reasons.values())
     stdout.write(
-        f"{num_checked} of {len(infos)} potential targets would be analyzed.\n"
+        f"{num_checked} of {len(skip_reasons)} potential targets would be analyzed.\n"
     )
-    return 0
 
 
 def check(
     args: argparse.Namespace, options: AnalysisOptionSet, stdout: TextIO, stderr: TextIO
 ) -> int:
+    if args.json and not args.list_targets:
+        print("--json is only supported with --list_targets.", file=stderr)
+        return 2
     any_problems = False
     entities = checked_load(args.target, stderr)
     if isinstance(entities, int):
         return entities
-    list_targets_only = getattr(args, "list_targets", False)
-    as_json = getattr(args, "json", False)
-    if as_json and not list_targets_only:
-        print("--json is only supported with --list_targets.", file=stderr)
-        return 2
-    if list_targets_only:
-        return report_targets(entities, options, stdout, as_json)
-    full_options = DEFAULT_OPTIONS.overlay(report_verbose=False).overlay(options)
     checkables = [c for e in entities for c in analyze_any(e, options)]
-    if not checkables:
+    if args.list_targets:
+        report_targets(checkables, stdout, args.json)
+        return 0
+    full_options = DEFAULT_OPTIONS.overlay(report_verbose=False).overlay(options)
+    if all(c.skip_reason() is not None for c in checkables):
         extra_help = ""
         if full_options.analysis_kind == [AnalysisKind.asserts]:
             extra_help = "\nHINT: Ensure that your functions to analyze lead with assert statements."

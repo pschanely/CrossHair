@@ -57,7 +57,9 @@ def call_check(
 ) -> Tuple[int, List[str], List[str]]:
     stdbuf: io.StringIO = io.StringIO()
     errbuf: io.StringIO = io.StringIO()
-    retcode = check(Namespace(target=files), options, stdbuf, errbuf)
+    retcode = check(
+        Namespace(target=files, list_targets=False, json=False), options, stdbuf, errbuf
+    )
     stdlines = [ls for ls in stdbuf.getvalue().split("\n") if ls]
     errlines = [ls for ls in errbuf.getvalue().split("\n") if ls]
     return retcode, stdlines, errlines
@@ -294,9 +296,7 @@ def test_assert_without_checkable(root, capsys: pytest.CaptureFixture[str]):
     assert exitcode == 0
 
 
-def test_list_targets_reports_checked_and_skipped(
-    root: Path, capsys: pytest.CaptureFixture[str]
-):
+def test_list_targets_reports_checked_and_skipped(root, capsys):
     simplefs(root, MIXED_TARGETS)
     exitcode = unwalled_main(["check", str(root / "foo.py"), "--list_targets"])
     out, err = capsys.readouterr()
@@ -306,13 +306,13 @@ def test_list_targets_reports_checked_and_skipped(
     assert lines[0].endswith("foo.py:10: info: foo.Fooey.inherited_check: checked")
     assert lines[1].endswith("foo.py:2: info: foo.checked_fn: checked")
     assert lines[2].endswith(
-        "foo.py:6: info: foo.unchecked_fn: not checked (no postconditions to check)"
+        "foo.py:6: info: foo.unchecked_fn: not checked (no postconditions)"
     )
     assert lines[3] == "2 of 3 potential targets would be analyzed."
     assert exitcode == 0
 
 
-def test_list_targets_json(root: Path, capsys: pytest.CaptureFixture[str]):
+def test_list_targets_json(root, capsys):
     simplefs(root, MIXED_TARGETS)
     exitcode = unwalled_main(
         ["check", str(root / "foo.py"), "--list_targets", "--json"]
@@ -324,15 +324,13 @@ def test_list_targets_json(root: Path, capsys: pytest.CaptureFixture[str]):
     checked = sorted(t["name"] for t in report["targets"] if t["checked"])
     assert checked == ["foo.Fooey.inherited_check", "foo.checked_fn"]
     unchecked = {t["name"]: t["reason"] for t in report["targets"] if not t["checked"]}
-    assert unchecked == {"foo.unchecked_fn": "no postconditions to check"}
+    assert unchecked == {"foo.unchecked_fn": "no postconditions"}
     for target in report["targets"]:
         assert target["filename"].endswith("foo.py")
         assert isinstance(target["line"], int)
 
 
-def test_json_without_list_targets_is_an_error(
-    root: Path, capsys: pytest.CaptureFixture[str]
-):
+def test_json_without_list_targets_is_an_error(root, capsys):
     simplefs(root, SIMPLE_FOO)
     exitcode = unwalled_main(["check", str(root / "foo.py"), "--json"])
     out, err = capsys.readouterr()

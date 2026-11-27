@@ -235,7 +235,7 @@ to run in CI:
 
     $ crosshair check mystuff.py --list_targets
     mystuff.py:4: info: mystuff.fn_with_contract: checked
-    mystuff.py:9: info: mystuff.fn_without_contract: not checked (no postconditions to check)
+    mystuff.py:9: info: mystuff.fn_without_contract: not checked (no postconditions)
     1 of 2 potential targets would be analyzed.
 
 Add ``--json`` for the same information in machine-readable form.
