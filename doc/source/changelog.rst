@@ -22,6 +22,8 @@ Next Version
    it would be analyzed, and why not, without running the solver. Add ``--json``
    for machine-readable output. (`see #571
    <https://github.com/pschanely/CrossHair/issues/571>`__)
+ * Fixed class invariants being checked on ``__init__`` when ``__init__`` has
+   its own preconditions.
 
 
 Version 0.0.114
