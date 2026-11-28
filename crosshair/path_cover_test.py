@@ -46,6 +46,21 @@ def _has_no_successful_paths(x: int) -> None:
         context_statespace().defer_assumption("fail", lambda: False)
 
 
+class _NoRepr:
+    def __init__(self, x: int):
+        self.x = x
+
+
+def _make_no_repr(x: int) -> _NoRepr:
+    return _NoRepr(x)
+
+
+def _float_branch(x: int) -> str:
+    if 0 <= x < 10 and x * 0.1 == 0.3:
+        return "equal"
+    return "not equal"
+
+
 @dataclass
 class Train:
     class Color(Enum):
@@ -66,6 +81,8 @@ exceptionex = FunctionInfo.from_fn(_exceptionex)
 symbolic_exception_example = FunctionInfo.from_fn(_symbolic_exception_example)
 has_no_successful_paths = FunctionInfo.from_fn(_has_no_successful_paths)
 paint_train = FunctionInfo.from_fn(_paint_train)
+float_branch = FunctionInfo.from_fn(_float_branch)
+make_no_repr = FunctionInfo.from_fn(_make_no_repr)
 
 
 def test_path_cover_foo() -> None:
@@ -134,3 +151,18 @@ def test_path_cover_pytest_output() -> None:
         "from crosshair.path_cover_test import _paint_train",
         "from crosshair.path_cover_test import Train",
     }
+
+
+def test_path_cover_reports_concrete_outcomes() -> None:
+    paths = list(path_cover(float_branch, OPTS, CoverageType.PATH))
+    assert paths
+    for path in paths:
+        assert path.result == repr(_float_branch(**path.args.arguments))
+
+
+def test_path_cover_result_without_repr() -> None:
+    paths = list(path_cover(make_no_repr, OPTS, CoverageType.OPCODE))
+    assert paths
+    for path in paths:
+        assert path.exc is None
+        assert re.fullmatch(r"<\S+\._NoRepr object at 0x[0-9A-Fa-f]+>", path.result)

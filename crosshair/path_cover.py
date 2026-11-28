@@ -2,32 +2,34 @@ import builtins
 import enum
 import re
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from inspect import BoundArguments
 from typing import Callable, List, Optional, Set, TextIO, Tuple, Type
 
-from crosshair.condition_parser import condition_parser
 from crosshair.core import (
     ExceptionFilter,
     LazyCreationRepr,
+    Patched,
     deep_realize,
     explore_paths,
     realize,
+    replay_concretely,
 )
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
 from crosshair.statespace import RootNode, StateSpace, context_statespace
 from crosshair.tracers import (
-    COMPOSITE_TRACER,
     CoverageResult,
     CoverageTracingModule,
     NoTracing,
     PushedModule,
 )
 from crosshair.util import (
+    EvalFriendlyReprContext,
     ReferencedIdentifier,
     ch_stack,
     debug,
+    eval_friendly_repr,
     format_boundargs,
     name_of_type,
 )
@@ -64,7 +66,6 @@ def path_cover(
         fn = fn.__wrapped__  # type: ignore
     search_root = RootNode()
 
-    paths: List[PathSummary] = []
     coverage: CoverageTracingModule = CoverageTracingModule(fn)
 
     def run_path(args: BoundArguments):
@@ -81,7 +82,7 @@ def path_cover(
         ret,
         exc: Optional[BaseException],
         exc_stack: Optional[traceback.StackSummary],
-    ) -> bool:
+    ) -> Optional[PathSummary]:
         with ExceptionFilter() as efilter:
             space.detach_path()
 
@@ -95,47 +96,66 @@ def path_cover(
 
             cov = coverage.get_results(fn)
             debug("Realized args:", formatted_pre_args)
+            exc_message = None
             if exc is not None:
                 debug("user-level exception found", type(exc), exc, ch_stack(exc_stack))
                 exc_message = realize(str(exc)) if len(exc.args) > 0 else None
-                paths.append(
-                    PathSummary(
-                        pre_args,
-                        formatted_pre_args,
-                        ret,
-                        type(exc),
-                        exc_message,
-                        post_args,
-                        cov,
-                        references,
-                    )
-                )
             else:
                 debug("Realized return:", ret)
-                paths.append(
-                    PathSummary(
-                        pre_args,
-                        formatted_pre_args,
-                        ret,
-                        None,
-                        None,
-                        post_args,
-                        cov,
-                        references,
-                    )
-                )
-            return False
+            return PathSummary(
+                pre_args,
+                formatted_pre_args,
+                ret,
+                None if exc is None else type(exc),
+                exc_message,
+                post_args,
+                cov,
+                references,
+            )
         debug("Skipping path (failed to realize values)", efilter.user_exc)
-        return False
+        return None
 
-    explore_paths(
-        run_path,
-        sig,
-        options,
-        search_root,
-        on_path_complete,
-        on_nondeterminism=on_nondeterminism,
+    paths: List[PathSummary] = list(
+        explore_paths(
+            run_path,
+            sig,
+            options,
+            search_root,
+            on_path_complete,
+            on_nondeterminism=on_nondeterminism,
+        )
     )
+
+    def replay(path: PathSummary) -> PathSummary:
+        def summarize(args: BoundArguments) -> PathSummary:
+            with ExceptionFilter() as efilter:
+                ret = run_path(args)
+            if efilter.ignore:
+                debug("Keeping symbolic path summary (replay was ignored)")
+                return path
+            replayed = replace(path, post_args=args, coverage=coverage.get_results(fn))
+            if efilter.user_exc is not None:
+                exc = efilter.user_exc[0]
+                exc_message = str(exc) if len(exc.args) > 0 else None
+                return replace(
+                    replayed, result="None", exc=type(exc), exc_message=exc_message
+                )
+            with Patched(), EvalFriendlyReprContext() as ctx:
+                result = ctx.cleanup(builtins.repr(ret))
+            if path.exc is None and result == path.result:
+                return replayed
+            debug("Concrete replay differs; it returns", result)
+            return replace(
+                replayed,
+                result=result,
+                exc=None,
+                exc_message=None,
+                references=path.references | ctx.repr_references,
+            )
+
+        return replay_concretely(options, path.args, summarize, path)
+
+    paths = [replay(path) for path in paths]
 
     opcodes_found: Set[int] = set()
     selected: List[PathSummary] = []

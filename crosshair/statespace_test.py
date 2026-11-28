@@ -1,4 +1,5 @@
 import copy
+import re
 import time
 
 import pytest
@@ -6,12 +7,15 @@ import pytest
 from crosshair import smt
 from crosshair.core import Patched, proxy_for_type
 from crosshair.statespace import (
+    CallAnalysis,
     HeapRef,
     RootNode,
     SimpleStateSpace,
     StateSpace,
     StateSpaceContext,
     SymbolicHeap,
+    VerificationStatus,
+    prefer_true,
 )
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing
 from crosshair.util import (
@@ -160,3 +164,28 @@ def test_is_possible_does_not_affect_realization():
         return _run_in_space(space, run)
 
     assert realize(check_first=True) == realize(check_first=False)
+
+
+def test_approximate_path_prevents_confirmation() -> None:
+    root = RootNode()
+    x = smt.const("x", smt.bool_sort)
+    exhausted = False
+    num_paths = 0
+    while not exhausted:
+        space = StateSpace(time.process_time() + 60, 10, root)
+        with StateSpaceContext(space):
+            space.choose_possible(x)
+            if num_paths == 0:
+                space.mark_approximate()
+            top, exhausted = space.bubble_status(
+                CallAnalysis(VerificationStatus.CONFIRMED)
+            )
+        num_paths += 1
+    assert num_paths == 2
+    assert top is not None
+    assert top.verification_status == VerificationStatus.UNKNOWN
+
+
+def test_prefer_true_on_concrete_values_without_bool() -> None:
+    assert prefer_true(re.match("a", "a")) is True
+    assert prefer_true([]) is False

@@ -30,7 +30,9 @@ from typing import (
     Collection,
     Dict,
     FrozenSet,
+    Generic,
     Iterable,
+    Iterator,
     List,
     Mapping,
     MutableMapping,
@@ -99,6 +101,7 @@ from crosshair.tracers import (
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import (
     ATOMIC_IMMUTABLE_TYPES,
+    CROSSHAIR_EXTRA_ASSERTS,
     UNABLE_TO_REPR_TEXT,
     AttributeHolder,
     CrossHairInternal,
@@ -107,6 +110,7 @@ from crosshair.util import (
     EvalFriendlyReprContext,
     IdKeyedDict,
     IgnoreAttempt,
+    NoStateSpace,
     NotDeterministic,
     ReferencedIdentifier,
     UnexploredPath,
@@ -1222,6 +1226,9 @@ class FunctionInterps:
     def append_return(self, callable: Callable, retval: object) -> None:
         self._interpretations[callable].append(retval)
 
+    def has_interpretations(self) -> bool:
+        return bool(self._interpretations)
+
     def patch_string(self) -> Optional[str]:
         if self._interpretations:
             patches = ",".join(
@@ -1396,12 +1403,16 @@ def analyze_calltree(
         interceptor=short_circuit.make_interceptor,
     )
 
-    def run_path(space: StateSpace) -> PathOutcome:
+    def run_path(
+        space: StateSpace,
+    ) -> PathOutcome[Tuple[CallAnalysis, ConcreteRefutation]]:
         nonlocal failing_precondition, failing_precondition_reason
         nonlocal num_confirmed_paths
         try:
             # The real work happens here!:
-            call_analysis = attempt_call(conditions, short_circuit, enforced_conditions)
+            call_analysis, refutation = attempt_call(
+                conditions, short_circuit, enforced_conditions
+            )
         except NotDeterministic:
             # TODO: Improve nondeterminism helpfulness
             tb = extract_tb(sys.exc_info()[2])
@@ -1419,7 +1430,8 @@ def analyze_calltree(
                             traceback.format_exc(),
                         )
                     ],
-                )
+                ),
+                breakout=True,
             )
         if failing_precondition is not None:
             cur_precondition = call_analysis.failing_precondition
@@ -1435,14 +1447,29 @@ def analyze_calltree(
             elif cur_precondition.line > failing_precondition.line:
                 failing_precondition = cur_precondition
                 failing_precondition_reason = call_analysis.failing_precondition_reason
-        if call_analysis.verification_status == VerificationStatus.CONFIRMED:
+        status = call_analysis.verification_status
+        if status == VerificationStatus.CONFIRMED:
             num_confirmed_paths += 1
+        elif status == VerificationStatus.REFUTED:
+            if refutation is None:
+                return PathOutcome(call_analysis, breakout=True)
+            return PathOutcome(
+                CallAnalysis(VerificationStatus.UNKNOWN),
+                candidate=(call_analysis, refutation),
+            )
         return PathOutcome(call_analysis)
 
-    # TODO clean up how enforced conditions works here?
-    exploration = explore_loop(options, search_root, run_path, stop_on_refutation=True)
+    exploration = Exploration(options, search_root, run_path)
+    top_analysis: Optional[CallAnalysis] = None
+    for call_analysis, refutation in exploration:
+        if replay_refutation(
+            conditions, refutation, options, short_circuit, enforced_conditions
+        ):
+            top_analysis = call_analysis
+            break
     space_exhausted = exploration.exhausted
-    top_analysis = search_root.child.get_result()
+    if top_analysis is None:
+        top_analysis = search_root.child.get_result()
     if top_analysis.messages:
         all_messages.extend(
             replace(
@@ -1498,108 +1525,130 @@ PathCompeltionCallback = Callable[
         Optional[BaseException],
         Optional[StackSummary],
     ],
-    bool,
+    object,
 ]
 
 
 @dataclass
-class PathOutcome:
+class PathOutcome(Generic[_T]):
     """
     The result of exploring one path.
 
     `analysis` is bubbled into the search tree; `breakout` requests that the
-    exploration stop after this path.
+    exploration stop after this path. A `candidate` pauses the exploration and
+    is yielded to the exploration's consumer.
     """
 
     analysis: CallAnalysis
     breakout: bool = False
+    candidate: Optional[_T] = None
 
 
-@dataclass
-class ExplorationResult:
-    top_analysis: Optional[CallAnalysis]
-    exhausted: bool
-    iterations: int
-
-
-def explore_loop(
-    options: AnalysisOptions,
-    search_root: RootNode,
-    run_path: Callable[[StateSpace], PathOutcome],
-    stop_on_refutation: bool = False,
-) -> ExplorationResult:
+class Exploration(Generic[_T]):
     """
-    The shared per-path exploration loop.
+    The shared per-path exploration loop, iterated for its candidates.
 
     Repeatedly builds a StateSpace and runs `run_path`, which returns the
     CallAnalysis to bubble into the search tree (and may request an early stop).
     Classifies the control-flow exceptions (`IgnoreAttempt`, `UnexploredPath`)
     uniformly; anything else (including `NotDeterministic`) is `run_path`'s to
-    handle. Stops on caller breakout, a refutation (when `stop_on_refutation`),
-    path exhaustion, the per-condition timeout, the iteration cap, or too many
-    uninteresting iterations.
+    handle. Stops on caller breakout, path exhaustion, the per-condition timeout,
+    the iteration cap, or too many uninteresting iterations.
+
+    Iterating yields each candidate outside of any StateSpace and without
+    symbolic patches; exploration resumes when the consumer asks for the next
+    one. `top_analysis`, `exhausted`, and `iterations` describe the
+    exploration so far.
     """
-    condition_start = process_time()
-    max_uninteresting_iterations = options.get_max_uninteresting_iterations()
-    top_analysis: Optional[CallAnalysis] = None
-    exhausted = False
-    i = 0
-    with Patched():
-        for i in range(1, options.max_iterations + 1):
-            debug("Iteration ", i)
-            itr_start = process_time()
-            if itr_start > condition_start + options.per_condition_timeout:
-                debug(
-                    "Stopping due to --per_condition_timeout=",
-                    options.per_condition_timeout,
-                )
-                break
-            options.incr("num_paths")
-            per_path_timeout = options.get_per_path_timeout()
-            space = StateSpace(
-                execution_deadline=itr_start + per_path_timeout,
-                model_check_timeout=per_path_timeout / 2,
-                search_root=search_root,
-            )
-            with (
-                condition_parser(options.analysis_kind),
-                COMPOSITE_TRACER,
-                NoTracing(),
-                StateSpaceContext(space),
-            ):
-                try:
-                    outcome = run_path(space)
-                except IgnoreAttempt:
-                    outcome = PathOutcome(CallAnalysis())
-                except UnexploredPath:
-                    outcome = PathOutcome(CallAnalysis(VerificationStatus.UNKNOWN))
-                debug("Verification status:", outcome.analysis.verification_status)
-                top_analysis, exhausted = space.bubble_status(outcome.analysis)
-                debug("Path tree stats", search_root.stats())
-                overall_status = (
-                    top_analysis.verification_status if top_analysis else None
-                )
-                if outcome.breakout:
-                    break
-                if stop_on_refutation and overall_status == VerificationStatus.REFUTED:
-                    break
-                if exhausted:
-                    options.incr("exhaustion")
-                    debug("Stopping due to path exhaustion")
-                    break
-                if max_uninteresting_iterations != sys.maxsize:
-                    iters_since_discovery = getattr(
-                        search_root.pathing_oracle, "iters_since_discovery"
-                    )
-                    assert isinstance(iters_since_discovery, int)
-                    debug("iters_since_discovery", iters_since_discovery)
-                    if iters_since_discovery > max_uninteresting_iterations:
+
+    def __init__(
+        self,
+        options: AnalysisOptions,
+        search_root: RootNode,
+        run_path: Callable[[StateSpace], PathOutcome[_T]],
+    ):
+        self.options = options
+        self.search_root = search_root
+        self.run_path = run_path
+        self.top_analysis: Optional[CallAnalysis] = None
+        self.exhausted = False
+        self.iterations = 0
+
+    def __iter__(self) -> Iterator[_T]:
+        options = self.options
+        search_root = self.search_root
+        condition_start = process_time()
+        max_uninteresting_iterations = options.get_max_uninteresting_iterations()
+        while True:
+            candidate: Optional[_T] = None
+            with Patched():
+                while self.iterations < options.max_iterations:
+                    self.iterations += 1
+                    debug("Iteration ", self.iterations)
+                    itr_start = process_time()
+                    if itr_start > condition_start + options.per_condition_timeout:
                         debug(
-                            "Stopping due to --max_uninteresting_iterations=",
-                            max_uninteresting_iterations,
+                            "Stopping due to --per_condition_timeout=",
+                            options.per_condition_timeout,
                         )
                         break
-    return ExplorationResult(top_analysis, exhausted, i)
+                    options.incr("num_paths")
+                    per_path_timeout = options.get_per_path_timeout()
+                    space = StateSpace(
+                        execution_deadline=itr_start + per_path_timeout,
+                        model_check_timeout=per_path_timeout / 2,
+                        search_root=search_root,
+                    )
+                    with (
+                        condition_parser(options.analysis_kind),
+                        COMPOSITE_TRACER,
+                        NoTracing(),
+                        StateSpaceContext(space),
+                    ):
+                        outcome: PathOutcome[_T]
+                        try:
+                            outcome = self.run_path(space)
+                        except IgnoreAttempt:
+                            outcome = PathOutcome(CallAnalysis())
+                        except UnexploredPath:
+                            outcome = PathOutcome(
+                                CallAnalysis(VerificationStatus.UNKNOWN)
+                            )
+                        debug(
+                            "Verification status:",
+                            outcome.analysis.verification_status,
+                        )
+                        self.top_analysis, self.exhausted = space.bubble_status(
+                            outcome.analysis
+                        )
+                        debug("Path tree stats", search_root.stats())
+                        if outcome.breakout:
+                            break
+                        if outcome.candidate is not None:
+                            candidate = outcome.candidate
+                            break
+                        if self.exhausted:
+                            options.incr("exhaustion")
+                            debug("Stopping due to path exhaustion")
+                            break
+                        if max_uninteresting_iterations != sys.maxsize:
+                            iters_since_discovery = getattr(
+                                search_root.pathing_oracle, "iters_since_discovery"
+                            )
+                            assert isinstance(iters_since_discovery, int)
+                            debug("iters_since_discovery", iters_since_discovery)
+                            if iters_since_discovery > max_uninteresting_iterations:
+                                debug(
+                                    "Stopping due to --max_uninteresting_iterations=",
+                                    max_uninteresting_iterations,
+                                )
+                                break
+            if candidate is None:
+                return
+            yield candidate
+            debug("Resuming exploration after candidate")
+            if self.exhausted:
+                return
 
 
 def explore_paths(
@@ -1607,11 +1656,14 @@ def explore_paths(
     sig: Signature,
     options: AnalysisOptions,
     search_root: RootNode,
-    on_path_complete: PathCompeltionCallback = (lambda *a: False),
+    on_path_complete: PathCompeltionCallback = (lambda *a: None),
     on_nondeterminism: Optional[Callable[[], None]] = None,
-) -> None:
+) -> Exploration:
     """
-    Runs a path exploration for use cases beyond invariant checking.
+    Creates a path exploration for use cases beyond invariant checking.
+
+    Iterating the exploration yields each candidate (anything but None) that
+    `on_path_complete` returns.
 
     On a nondeterministic path, if `on_nondeterminism` is supplied it is called
     and exploration continues (the path is ignored); otherwise NotDeterministic
@@ -1633,7 +1685,7 @@ def explore_paths(
                 else:
                     user_exc, user_exc_stack = efilter.user_exc
             with ResumedTracing():
-                breakout = on_path_complete(
+                candidate = on_path_complete(
                     space, pre_args, args, ret, user_exc, user_exc_stack
                 )
         except NotDeterministic:
@@ -1642,9 +1694,11 @@ def explore_paths(
             debug("Ignoring nondeterministic path:", format_exc())
             on_nondeterminism()
             return PathOutcome(CallAnalysis())
-        return PathOutcome(CallAnalysis(VerificationStatus.CONFIRMED), breakout)
+        return PathOutcome(
+            CallAnalysis(VerificationStatus.CONFIRMED), candidate=candidate
+        )
 
-    explore_loop(options, search_root, run_path)
+    return Exploration(options, search_root, run_path)
 
 
 def make_counterexample_message(
@@ -1762,17 +1816,45 @@ def _copy_compares_equal(value: object) -> bool:
         return False
 
 
-def attempt_call(
+class CallOutcomeKind(enum.Enum):
+    PRE_FAIL = "precondition is false"
+    PRE_ERR = "precondition raised"
+    IGNORED = "ignored"
+    EXPECTED_RAISE = "raised an expected exception"
+    EXEC_ERR = "function raised"
+    ARGS_UNCOPIED = "arguments could not be copied"
+    ARG_CHANGED = "argument changed"
+    OLD_UNAVAILABLE = "__old__ could not be copied"
+    POST_ERR = "postcondition raised"
+    POST_FAIL = "postcondition is false"
+    POST_OK = "postcondition is true"
+
+
+@dataclass
+class CallOutcome:
+    kind: CallOutcomeKind
+    snapshot: ArgumentSnapshot
+    precondition: Optional[ConditionExpr] = None
+    exc: Optional[BaseException] = None
+    exc_stack: Optional[StackSummary] = None
+    return_value: object = None
+    changed_argname: Optional[str] = None
+
+
+def check_call(
     conditions: Conditions,
+    original_args: BoundArguments,
     short_circuit: ShortCircuitingContext,
     enforced_conditions: EnforcedConditions,
-) -> CallAnalysis:
+) -> CallOutcome:
+    """
+    Call the function with copies of the given arguments, checking its contract.
+
+    Exceptions are captured in the outcome; values in it are not realized.
+    """
     assert not is_tracing()
     fn = conditions.fn
-    space = context_statespace()
-    msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement():
-        original_args = gen_args(conditions.sig)
         snapshot = ArgumentSnapshot(original_args.arguments)
     bound_args = BoundArguments(conditions.sig, snapshot.copies)  # type: ignore
 
@@ -1782,6 +1864,18 @@ def attempt_call(
     # demonstrate immutability.
     lcls = {"__old__": AttributeHolder(lcls), **lcls}
     expected_exceptions = conditions.raises
+
+    def filtered(
+        efilter: ExceptionFilter, kind: CallOutcomeKind, **kw: Any
+    ) -> CallOutcome:
+        if efilter.ignore:
+            if efilter.analysis.verification_status == VerificationStatus.CONFIRMED:
+                return CallOutcome(CallOutcomeKind.EXPECTED_RAISE, snapshot)
+            return CallOutcome(CallOutcomeKind.IGNORED, snapshot)
+        assert efilter.user_exc is not None
+        exc, exc_stack = efilter.user_exc
+        return CallOutcome(kind, snapshot, exc=exc, exc_stack=exc_stack, **kw)
+
     for precondition in conditions.pre:
         if not precondition.evaluate:
             continue
@@ -1792,26 +1886,12 @@ def attempt_call(
                 precondition_ok = realize(prefer_true(precondition_ok))
             if not precondition_ok:
                 debug("Failed to meet precondition", precondition.expr_source)
-                return CallAnalysis(failing_precondition=precondition)
-        if efilter.ignore:
-            debug("Ignored exception in precondition.", efilter.analysis)
-            return efilter.analysis
-        elif efilter.user_exc is not None:
-            user_exc, tb = efilter.user_exc
-            with ResumedTracing():
-                user_exc = space.detach_path(user_exc)
-            formatted_tb = tb.format()
-            debug(
-                "Exception attempting to meet precondition",
-                precondition.expr_source,
-                ":",
-                user_exc,
-                formatted_tb,
-            )
-            return CallAnalysis(
-                failing_precondition=precondition,
-                failing_precondition_reason=f'it raised "{repr(user_exc)} at {formatted_tb[-1]}"',
-            )
+                return CallOutcome(
+                    CallOutcomeKind.PRE_FAIL, snapshot, precondition=precondition
+                )
+        if efilter.ignore or efilter.user_exc is not None:
+            debug("Exception in precondition", precondition.expr_source)
+            return filtered(efilter, CallOutcomeKind.PRE_ERR, precondition=precondition)
 
     with ExceptionFilter(expected_exceptions) as efilter:
         unenforced_fn = NoEnforce(fn)
@@ -1831,34 +1911,9 @@ def attempt_call(
             "__old__": old_args,
             fn.__name__: fn,
         }
-
-    if efilter.ignore:
-        debug("Ignored exception in function.", efilter.analysis)
-        return efilter.analysis
-    elif efilter.user_exc is not None:
-        e, tb = efilter.user_exc
-        tb_desc = tb.format()
-        frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
-        with ResumedTracing():
-            e = space.detach_path(e)
-        detail = name_of_type(type(e)) + ": " + str(e)
-        detail += " " + make_counterexample_message(
-            conditions, original_args, copy_note=snapshot.counterexample_note()
-        )
-        debug("exception while evaluating function body:", detail)
-        debug("exception traceback:", ch_stack(tb))
-        return CallAnalysis(
-            VerificationStatus.REFUTED,
-            [
-                msg_gen.make(
-                    MessageType.EXEC_ERR,
-                    detail,
-                    frame_filename,
-                    frame_lineno,
-                    "".join(tb_desc),
-                )
-            ],
-        )
+    if efilter.ignore or efilter.user_exc is not None:
+        debug("Exception in function body.")
+        return filtered(efilter, CallOutcomeKind.EXEC_ERR)
 
     (post_condition,) = conditions.post
     assert post_condition.evaluate is not None
@@ -1867,14 +1922,9 @@ def attempt_call(
             name for name in bound_args.arguments if name not in conditions.mutable_args
         ]
         if checked_args and snapshot.failures():
-            with ResumedTracing():
-                space.detach_path()
-            detail = (
-                "Cannot check that arguments are unchanged: "
-                f"{snapshot.describe_failures()}. "
-                "Define __deepcopy__, or list every argument in post[...]."
+            return CallOutcome(
+                CallOutcomeKind.ARGS_UNCOPIED, snapshot, return_value=__return__
             )
-            return _contract_error(msg_gen, post_condition, detail)
         for argname in checked_args:
             old_val = original_args.arguments[argname]
             new_val = bound_args.arguments[argname]
@@ -1883,23 +1933,13 @@ def attempt_call(
                     unchanged = old_val is new_val or bool(old_val == new_val)
                 except Exception:
                     unchanged = False
-            if unchanged:
-                continue
-            with ResumedTracing():
-                space.detach_path()
-            if _copy_compares_equal(old_val):
-                detail = f'Argument "{argname}" changed ' + make_counterexample_message(
-                    conditions, original_args, __return__
+            if not unchanged:
+                return CallOutcome(
+                    CallOutcomeKind.ARG_CHANGED,
+                    snapshot,
+                    return_value=__return__,
+                    changed_argname=argname,
                 )
-            else:
-                typename = name_of_type(type(deep_realize(old_val)))
-                detail = (
-                    f'Cannot check that argument "{argname}" is unchanged: '
-                    "a copy of it does not compare equal to the original "
-                    f"(does {typename} define __eq__?). "
-                    f'Define __eq__, or list "{argname}" in post[...].'
-                )
-            return _contract_error(msg_gen, post_condition, detail)
 
     old_unavailable = False
     with ExceptionFilter(expected_exceptions) as efilter:
@@ -1914,24 +1954,161 @@ def attempt_call(
             except _OldUnavailable:
                 old_unavailable = True
     if old_unavailable:
-        with ResumedTracing():
-            space.detach_path()
+        return CallOutcome(
+            CallOutcomeKind.OLD_UNAVAILABLE, snapshot, return_value=__return__
+        )
+    if efilter.ignore or efilter.user_exc is not None:
+        debug("Exception in postcondition.")
+        return filtered(efilter, CallOutcomeKind.POST_ERR, return_value=__return__)
+    kind = CallOutcomeKind.POST_OK if isok else CallOutcomeKind.POST_FAIL
+    return CallOutcome(kind, snapshot, return_value=__return__)
+
+
+@dataclass
+class ConcreteRefutation:
+    """Realized arguments for a refuting call, and how that call failed."""
+
+    args: BoundArguments
+    kind: CallOutcomeKind
+    exc_type: Optional[Type[BaseException]]
+    is_approximate: bool
+
+    def reproduced_by(self, outcome: CallOutcome) -> bool:
+        exc_type = None if outcome.exc is None else type(outcome.exc)
+        return outcome.kind == self.kind and exc_type is self.exc_type
+
+
+def attempt_call(
+    conditions: Conditions,
+    short_circuit: ShortCircuitingContext,
+    enforced_conditions: EnforcedConditions,
+) -> Tuple[CallAnalysis, Optional[ConcreteRefutation]]:
+    """
+    Check the function's contract on symbolic arguments.
+
+    For a refutation that can be re-checked with concrete values, also returns
+    realized arguments and the expected outcome.
+    """
+    assert not is_tracing()
+    space = context_statespace()
+    msg_gen = MessageGenerator(conditions.src_fn)
+    with enforced_conditions.enabled_enforcement():
+        original_args = gen_args(conditions.sig)
+    outcome = check_call(conditions, original_args, short_circuit, enforced_conditions)
+    kind = outcome.kind
+    snapshot = outcome.snapshot
+    __return__ = outcome.return_value
+    (post_condition,) = conditions.post
+    concrete_args: Optional[BoundArguments] = None
+
+    def counterexample(return_val: object = None, copy_note: str = "") -> str:
+        nonlocal concrete_args
+        concrete_args = space.extra(LazyCreationRepr).deep_realize(original_args)
+        return make_counterexample_message(
+            conditions, concrete_args, return_val, copy_note
+        )
+
+    def refutation(
+        analysis: CallAnalysis, exc: Optional[BaseException]
+    ) -> Tuple[CallAnalysis, Optional[ConcreteRefutation]]:
+        if (
+            concrete_args is None
+            or snapshot.failures()
+            or space.extra(FunctionInterps).has_interpretations()
+        ):
+            return (analysis, None)
+        exc_type = None if exc is None else type(exc)
+        replay = ConcreteRefutation(concrete_args, kind, exc_type, space.is_approximate)
+        return (analysis, replay)
+
+    if kind == CallOutcomeKind.POST_OK:
+        debug("Postcondition confirmed.")
+        return (CallAnalysis(VerificationStatus.CONFIRMED), None)
+    elif kind == CallOutcomeKind.IGNORED:
+        return (CallAnalysis(), None)
+    elif kind == CallOutcomeKind.EXPECTED_RAISE:
+        return (CallAnalysis(VerificationStatus.CONFIRMED), None)
+    elif kind == CallOutcomeKind.PRE_FAIL:
+        return (CallAnalysis(failing_precondition=outcome.precondition), None)
+
+    exc, tb = outcome.exc, outcome.exc_stack
+    with ResumedTracing():
+        exc = space.detach_path(exc)
+
+    if kind == CallOutcomeKind.PRE_ERR:
+        assert tb is not None
+        formatted_tb = tb.format()
+        assert outcome.precondition is not None
+        debug(
+            "Exception attempting to meet precondition",
+            outcome.precondition.expr_source,
+            ":",
+            exc,
+            formatted_tb,
+        )
+        reason = f'it raised "{repr(exc)} at {formatted_tb[-1]}"'
+        return (
+            CallAnalysis(
+                failing_precondition=outcome.precondition,
+                failing_precondition_reason=reason,
+            ),
+            None,
+        )
+    elif kind == CallOutcomeKind.EXEC_ERR:
+        assert exc is not None and tb is not None
+        tb_desc = tb.format()
+        frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
+        detail = name_of_type(type(exc)) + ": " + str(exc)
+        detail += " " + counterexample(copy_note=snapshot.counterexample_note())
+        debug("exception while evaluating function body:", detail)
+        debug("exception traceback:", ch_stack(tb))
+        return refutation(
+            CallAnalysis(
+                VerificationStatus.REFUTED,
+                [
+                    msg_gen.make(
+                        MessageType.EXEC_ERR,
+                        detail,
+                        frame_filename,
+                        frame_lineno,
+                        "".join(tb_desc),
+                    )
+                ],
+            ),
+            exc,
+        )
+    elif kind == CallOutcomeKind.ARGS_UNCOPIED:
+        detail = (
+            "Cannot check that arguments are unchanged: "
+            f"{snapshot.describe_failures()}. "
+            "Define __deepcopy__, or list every argument in post[...]."
+        )
+        return (_contract_error(msg_gen, post_condition, detail), None)
+    elif kind == CallOutcomeKind.ARG_CHANGED:
+        argname = outcome.changed_argname
+        assert argname is not None
+        old_val = original_args.arguments[argname]
+        if _copy_compares_equal(old_val):
+            detail = f'Argument "{argname}" changed ' + counterexample(__return__)
+        else:
+            typename = name_of_type(type(deep_realize(old_val)))
+            detail = (
+                f'Cannot check that argument "{argname}" is unchanged: '
+                "a copy of it does not compare equal to the original "
+                f"(does {typename} define __eq__?). "
+                f'Define __eq__, or list "{argname}" in post[...].'
+            )
+        return refutation(_contract_error(msg_gen, post_condition, detail), exc)
+    elif kind == CallOutcomeKind.OLD_UNAVAILABLE:
         detail = (
             f"Cannot read __old__: {snapshot.describe_failures()}. "
             "Define __deepcopy__, or avoid __old__."
         )
-        return _contract_error(msg_gen, post_condition, detail)
-    if efilter.ignore:
-        debug("Ignored exception in postcondition.", efilter.analysis)
-        return efilter.analysis
-    elif efilter.user_exc is not None:
-        e, tb = efilter.user_exc
-        with ResumedTracing():
-            e = space.detach_path(e)
-        detail = name_of_type(type(e)) + ": " + str(e)
-        detail += " " + make_counterexample_message(
-            conditions, original_args, __return__, snapshot.counterexample_note()
-        )
+        return (_contract_error(msg_gen, post_condition, detail), None)
+    elif kind == CallOutcomeKind.POST_ERR:
+        assert exc is not None and tb is not None
+        detail = name_of_type(type(exc)) + ": " + str(exc)
+        detail += " " + counterexample(__return__, snapshot.counterexample_note())
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", ch_stack(tb))
         failures = [
@@ -1943,16 +2120,10 @@ def attempt_call(
                 "".join(tb.format()),
             )
         ]
-        return CallAnalysis(VerificationStatus.REFUTED, failures)
-    if isok:
-        debug("Postcondition confirmed.")
-        return CallAnalysis(VerificationStatus.CONFIRMED)
+        return refutation(CallAnalysis(VerificationStatus.REFUTED, failures), exc)
     else:
-        with ResumedTracing():
-            space.detach_path()
-        detail = "false " + make_counterexample_message(
-            conditions, original_args, __return__, snapshot.counterexample_note()
-        )
+        assert kind == CallOutcomeKind.POST_FAIL
+        detail = "false " + counterexample(__return__, snapshot.counterexample_note())
         debug(detail)
         failures = [
             msg_gen.make(
@@ -1963,7 +2134,62 @@ def attempt_call(
                 "",
             )
         ]
-        return CallAnalysis(VerificationStatus.REFUTED, failures)
+        return refutation(CallAnalysis(VerificationStatus.REFUTED, failures), exc)
+
+
+def replay_concretely(
+    options: AnalysisOptions,
+    args: BoundArguments,
+    run: Callable[[BoundArguments], _T],
+    fallback: _T,
+) -> _T:
+    """
+    Call `run` on a copy of `args`, outside of any StateSpace, with tracing on.
+
+    Objects that cannot be copied are shared with `args`.
+
+    Returns `fallback` when the call encounters a symbolic value, or raises
+    `IgnoreAttempt` or `UnexploredPath`.
+    """
+    debug("Replaying with concrete arguments")
+    copied = deepcopyext(args, CopyMode.BEST_EFFORT, {})
+    try:
+        with condition_parser(options.analysis_kind), COMPOSITE_TRACER:
+            return run(copied)
+    except (NoStateSpace, IgnoreAttempt, UnexploredPath) as exc:
+        debug("Unable to replay concretely:", type(exc).__name__, exc)
+        return fallback
+
+
+def replay_refutation(
+    conditions: Conditions,
+    refutation: ConcreteRefutation,
+    options: AnalysisOptions,
+    short_circuit: ShortCircuitingContext,
+    enforced_conditions: EnforcedConditions,
+) -> bool:
+    """
+    Whether a call with the refutation's arguments fails in the same way.
+
+    Runs outside of any StateSpace. Also returns True when the call encounters a
+    symbolic value.
+    """
+
+    def check(args: BoundArguments) -> Optional[CallOutcome]:
+        with NoTracing():
+            return check_call(conditions, args, short_circuit, enforced_conditions)
+
+    outcome = replay_concretely(options, refutation.args, check, None)
+    if outcome is None:
+        return True
+    if refutation.reproduced_by(outcome):
+        debug("Concrete replay reproduced the refutation")
+        return True
+    detail = f"expected {refutation.kind.value}, but {outcome.kind.value}"
+    if CROSSHAIR_EXTRA_ASSERTS and not refutation.is_approximate:
+        raise CrossHairInternal(f"Concrete replay did not reproduce: {detail}")
+    debug("Concrete replay did not reproduce:", detail)
+    return False
 
 
 def _mutability_testing_hash(o: object) -> int:

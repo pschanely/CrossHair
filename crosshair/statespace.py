@@ -6,7 +6,7 @@ import random
 import re
 import threading
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
 from sys import _getframe
 from time import process_time
@@ -45,6 +45,7 @@ from crosshair.util import (
     CROSSHAIR_SMT_RLIMIT,
     CrossHairInternal,
     IgnoreAttempt,
+    NoStateSpace,
     NotDeterministic,
     PathTimeout,
     UnknownSatisfiability,
@@ -211,7 +212,7 @@ else:
 def prefer_true(v: Any) -> bool:
     if not (hasattr(v, "var") and smt.has_bool_sort(v.var)):
         with ResumedTracing():
-            v = v.__bool__()
+            v = v.__bool__() if hasattr(v, "__bool__") else bool(v)
         if not (hasattr(v, "var")):
             return v
     space = context_statespace()
@@ -300,7 +301,7 @@ def optional_context_statespace() -> Optional["StateSpace"]:
 def context_statespace() -> "StateSpace":
     space = _THREAD_LOCALS.space
     if space is None:
-        raise CrossHairInternal("Not in a statespace context")
+        raise NoStateSpace("Not in a statespace context")
     return space
 
 
@@ -763,7 +764,7 @@ class StateSpace:
         else:
             self.smt_rlimit = None
         self.choices_made: List[SearchTreeNode] = []
-        self.status_cap: Optional[VerificationStatus] = None
+        self.is_approximate = False
         self.heap = SymbolicHeap()
         self._heap_entries: List[Tuple[smt.ExprRef, Type, object]] = []
         self.next_uniq = 1
@@ -1377,14 +1378,23 @@ class StateSpace:
             self._search_position = node.child
             debug("Detached from search tree")
 
-    def cap_result_at_unknown(self):
-        # TODO: this doesn't seem to work as intended.
-        # If any execution path is confirmed, the end result is sometimes confirmed as well.
-        self.status_cap = VerificationStatus.UNKNOWN
+    def mark_approximate(self) -> None:
+        """
+        Record that this path models some values inexactly.
+
+        A confirmation, or a path without a verification status, is bubbled as
+        UNKNOWN.
+        """
+        self.is_approximate = True
 
     def bubble_status(
         self, analysis: CallAnalysis
     ) -> Tuple[Optional[CallAnalysis], bool]:
+        if self.is_approximate and analysis.verification_status in (
+            None,
+            VerificationStatus.CONFIRMED,
+        ):
+            analysis = replace(analysis, verification_status=VerificationStatus.UNKNOWN)
         # In some cases, we might ignore an attempt while not at a leaf.
         if isinstance(self._search_position, NodeStem):
             self._search_position = self.grow_into(SearchLeaf(analysis))
@@ -1405,11 +1415,7 @@ class StateSpace:
                     debug(line)
         # debug('Path summary:', self.choices_made)
         first = self.choices_made[0]
-        analysis = first.get_result()
-        verification_status = analysis.verification_status
-        if self.status_cap is not None and verification_status is not None:
-            analysis.verification_status = min(verification_status, self.status_cap)
-        return (analysis, first.is_exhausted())
+        return (first.get_result(), first.is_exhausted())
 
 
 class SimpleStateSpace(StateSpace):

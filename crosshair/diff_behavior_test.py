@@ -272,3 +272,18 @@ def test_diff_behavior_nan() -> None:
         DEFAULT_OPTIONS,
     )
     assert diffs == []
+
+
+def test_diff_behavior_ignores_unreproducible_difference() -> None:
+    def f1(x: int) -> bool:
+        return 0 <= x < 10 and x * 0.1 == 0.3
+
+    def f2(x: int) -> bool:
+        return False
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(f1),
+        FunctionInfo.from_fn(f2),
+        DEFAULT_OPTIONS.overlay(max_iterations=40),
+    )
+    assert diffs == []

@@ -256,9 +256,9 @@ def test_number_promotion_compare_ok(space: StateSpace) -> None:
 def test_numeric_promotions() -> None:
     def f(b: bool, i: int) -> Tuple[int, float, float]:
         """
-        post: _ != (101, 4.14, 13.14)
+        post: _ != (101, 4.5, 13.5)
         """
-        return ((b + 100), (b + 3.14), (i + 3.14))
+        return ((b + 100), (b + 3.5), (i + 3.5))
 
     check_states(f, POST_FAIL)
 

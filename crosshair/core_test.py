@@ -2,6 +2,7 @@ import abc
 import dataclasses
 import importlib
 import inspect
+import math
 import re
 import sys
 import time
@@ -1739,3 +1740,87 @@ if __name__ == "__main__":
         import cProfile
 
         cProfile.run("profile()", "out.pprof")
+
+
+def test_unreproducible_float_counterexample_is_not_reported() -> None:
+    def f(x: int) -> float:
+        """
+        pre: 0 <= x < 10
+        post: _ != 0.3
+        """
+        return x * 0.1
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_search_continues_after_unreproducible_counterexample() -> None:
+    def f(x: float) -> float:
+        """
+        pre: 0 < x < 1
+        post: _ != 0.3
+        """
+        return x + 0.2
+
+    options = AnalysisOptionSet(
+        max_uninteresting_iterations=sys.maxsize, per_condition_timeout=16
+    )
+    messages = run_checkables(analyze_function(f, options))
+    assert len(messages) == 1
+    assert messages[0].state == MessageType.POST_FAIL
+    match = re.search(r"f\((.*?)\)", messages[0].message)
+    assert match is not None
+    found_x = float(match.group(1))
+    assert found_x + 0.2 == 0.3
+
+
+def float_callee(x: float) -> float:
+    """
+    pre: x != 0.3
+    """
+    return x
+
+
+def test_unreproducible_callee_precondition_failure_is_not_reported() -> None:
+    def f(x: int) -> float:
+        """
+        pre: 0 <= x < 10
+        post: True
+        """
+        return float_callee(x * 0.1)
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_callee_precondition_failure_reproduces() -> None:
+    def f(x: int) -> float:
+        """
+        pre: 0 <= x < 10
+        post: True
+        """
+        return float_callee(x / 10)
+
+    check_states(f, MessageType.EXEC_ERR)
+
+
+def test_float_precondition_unmet_by_real_floats() -> None:
+    def f(x: float) -> float:
+        """
+        pre: math.isfinite(x) and x + 1.0 == x
+        post: False
+        """
+        return x
+
+    check_states(f, POST_FAIL)
+
+
+def test_refutation_is_kept_when_replay_reads_a_symbolic() -> None:
+    seen = []
+
+    def f(x: int) -> int:
+        """
+        post: _ != 7
+        """
+        seen.append(x)
+        return seen[0]
+
+    check_states(f, POST_FAIL)

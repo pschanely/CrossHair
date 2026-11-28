@@ -8,7 +8,12 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 
 from crosshair import IgnoreAttempt
 from crosshair.behavior_compare import flexible_equal
-from crosshair.core import ExceptionFilter, deep_realize, explore_paths
+from crosshair.core import (
+    ExceptionFilter,
+    deep_realize,
+    explore_paths,
+    replay_concretely,
+)
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
 from crosshair.statespace import RootNode, StateSpace
@@ -18,7 +23,12 @@ from crosshair.tracers import (
     NoTracing,
     PushedModule,
 )
-from crosshair.util import CrosshairUnsupported, IgnoreAttempt, debug
+from crosshair.util import (
+    ControlFlowException,
+    CrosshairUnsupported,
+    IgnoreAttempt,
+    debug,
+)
 
 
 class ExceptionEquivalenceType(enum.Enum):
@@ -185,7 +195,6 @@ def diff_behavior_with_signature(
     on_nondeterminism: Optional[Callable[[], None]] = None,
 ) -> Iterable[BehaviorDiff]:
     search_root = RootNode()
-    diffs: List[BehaviorDiff] = []
 
     def run_both(args1: inspect.BoundArguments) -> _ExecutionPair:
         args2 = copy.deepcopy(args1)
@@ -196,6 +205,40 @@ def diff_behavior_with_signature(
             return2, exc2 = describe_behavior(fn2, args2)
         return _ExecutionPair(return1, exc1, return2, exc2, args2, coverage_manager)
 
+    def is_equivalent(args1: inspect.BoundArguments, run: _ExecutionPair) -> bool:
+        return (
+            flexible_equal(run.return1, run.return2)
+            and flexible_equal(args1.arguments, run.args2.arguments)
+            and check_exception_equivalence(exception_equivalence, run.exc1, run.exc2)
+        )
+
+    def describe_diff(
+        pre_args: inspect.BoundArguments,
+        args1: inspect.BoundArguments,
+        run: _ExecutionPair,
+    ) -> BehaviorDiff:
+        def realized_reprs(args: inspect.BoundArguments) -> Dict[str, str]:
+            return {k: repr(deep_realize(v)) for (k, v) in args.arguments.items()}
+
+        def describe_exc(exc: Optional[BaseException]) -> Optional[str]:
+            return None if exc is None else repr(deep_realize(exc))
+
+        return BehaviorDiff(
+            realized_reprs(pre_args),
+            Result(
+                repr(deep_realize(run.return1)),
+                describe_exc(run.exc1),
+                realized_reprs(args1),
+            ),
+            Result(
+                repr(deep_realize(run.return2)),
+                describe_exc(run.exc2),
+                realized_reprs(run.args2),
+            ),
+            run.coverage_manager.get_results(fn1),
+            run.coverage_manager.get_results(fn2),
+        )
+
     def on_path_complete(
         space: StateSpace,
         pre_args: inspect.BoundArguments,
@@ -203,68 +246,56 @@ def diff_behavior_with_signature(
         run: Optional[_ExecutionPair],
         exc: Optional[BaseException],
         exc_stack: Optional[traceback.StackSummary],
-    ) -> bool:
+    ) -> Optional[Tuple[inspect.BoundArguments, BehaviorDiff]]:
         if run is None:
-            return False
+            return None
         with ExceptionFilter() as efilter:
-            args2 = run.args2
-            if (
-                flexible_equal(run.return1, run.return2)
-                and flexible_equal(args1.arguments, args2.arguments)
-                and check_exception_equivalence(
-                    exception_equivalence, run.exc1, run.exc2
-                )
-            ):
+            if is_equivalent(args1, run):
                 # Functions are equivalent if both have the same result,
                 # and deemed to have the same kind of error.
                 space.detach_path()
                 debug("Functions equivalent")
-                return False
+                return None
             space.detach_path()
             debug("Functions differ")
-            realized_args = {
-                k: repr(deep_realize(v)) for (k, v) in pre_args.arguments.items()
-            }
-            post_execution_args1 = {
-                k: repr(deep_realize(v)) for k, v in args1.arguments.items()
-            }
-            post_execution_args2 = {
-                k: repr(deep_realize(v)) for k, v in args2.arguments.items()
-            }
-            diffs.append(
-                BehaviorDiff(
-                    realized_args,
-                    Result(
-                        repr(deep_realize(run.return1)),
-                        repr(deep_realize(run.exc1)) if run.exc1 is not None else None,
-                        post_execution_args1,
-                    ),
-                    Result(
-                        repr(deep_realize(run.return2)),
-                        repr(deep_realize(run.exc2)) if run.exc2 is not None else None,
-                        post_execution_args2,
-                    ),
-                    run.coverage_manager.get_results(fn1),
-                    run.coverage_manager.get_results(fn2),
-                )
-            )
-            return False
+            diff = describe_diff(pre_args, args1, run)
+            return (deep_realize(pre_args), diff)
         if efilter.user_exc:
             debug(
                 "User-level exception found",
                 repr(efilter.user_exc[0]),
                 efilter.user_exc[1],
             )
-        return False
+        return None
 
-    explore_paths(
-        run_both,
-        sig,
-        options,
-        search_root,
-        on_path_complete,
-        on_nondeterminism=on_nondeterminism,
+    def replay(
+        pre_args: inspect.BoundArguments, symbolic_diff: BehaviorDiff
+    ) -> Optional[BehaviorDiff]:
+        def compare(args1: inspect.BoundArguments) -> Optional[BehaviorDiff]:
+            run = run_both(args1)
+            if is_equivalent(args1, run):
+                debug("Concrete replay found no difference for", symbolic_diff.args)
+                return None
+            return describe_diff(pre_args, args1, run)
+
+        fallback: Optional[BehaviorDiff] = symbolic_diff
+        return replay_concretely(options, pre_args, compare, fallback)
+
+    candidates: List[Tuple[inspect.BoundArguments, BehaviorDiff]] = list(
+        explore_paths(
+            run_both,
+            sig,
+            options,
+            search_root,
+            on_path_complete,
+            on_nondeterminism=on_nondeterminism,
+        )
     )
+    diffs: List[BehaviorDiff] = []
+    for pre_args, symbolic_diff in candidates:
+        diff = replay(pre_args, symbolic_diff)
+        if diff is not None:
+            diffs.append(diff)
     return diffs
 
 
